@@ -10,8 +10,8 @@ import { canRedo, canUndo } from '../state/history';
 import { useDispatch } from '../state/context';
 import { newId } from '../model/ids';
 import { createEmptyProject, defaultCircuit, defaultPanel, sampleProject } from '../model/defaults';
-import { FILE_EXT, parse, serialize } from '../model/project';
-import { downloadBlob, pickFile, readFileAsText, safeFileName } from '../export/download';
+import { parse, projectFileName, serialize } from '../model/project';
+import { downloadBlob, pickFile, readFileAsText } from '../export/download';
 import { titleInfoFromMeta } from '../layout/sheet';
 import { ProjectMetaForm } from './forms/ProjectMetaForm';
 import { HvForm } from './forms/HvForm';
@@ -71,7 +71,7 @@ export function Shell({ state }: { state: AppState }) {
     }
   };
   const onSave = () => {
-    downloadBlob(`${safeFileName(project.meta.name)}${FILE_EXT}`, serialize(project), 'application/json');
+    downloadBlob(projectFileName(project), serialize(project), 'application/json');
   };
   const addPanel = () => {
     const n = project.panels.length + 1;

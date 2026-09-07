@@ -17,7 +17,7 @@ export function regenerateAll(project: Project): RegenerateResult {
     results.push(generateHvSld(project.hv, project.meta, project.panels));
   }
   for (const panel of project.panels) {
-    results.push(generateLvSld(panel, project.meta, project.hv.transformers));
+    results.push(...generateLvSld(panel, project.meta, project.hv.transformers));
     results.push(generateLvFace(panel, project.meta));
     results.push(...generateLvSchedule(panel, project.meta, project.hv.transformers));
   }

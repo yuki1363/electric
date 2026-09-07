@@ -31,6 +31,13 @@ export function pickFile(accept: string): Promise<File | null> {
   });
 }
 
-export function safeFileName(s: string): string {
-  return s.replace(/[\\/:*?"<>|]/g, '_').trim() || 'drawing';
+/**
+ * ファイル名に使えない文字を除去する。
+ * asciiOnly を指定すると非 ASCII も `_` に落とす（DXF など CAD 取り込み用）。
+ */
+export function safeFileName(s: string, asciiOnly = false): string {
+  let out = s.replace(/[\\/:*?"<>|]/g, '_');
+  if (asciiOnly) out = out.replace(/[^\x20-\x7E]+/g, '_');
+  out = out.replace(/\s+/g, '_').replace(/_{2,}/g, '_').replace(/^_+|_+$/g, '');
+  return out || 'drawing';
 }

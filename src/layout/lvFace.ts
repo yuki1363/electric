@@ -9,9 +9,10 @@ import { wrapText } from './textWidth';
 import type { GenResult } from './types';
 
 const OX = 40;
-const OY = 60;
+/** 見出しの下から盤の描画を始める */
+const OY = 42;
 const GAP = 2;
-const ROW_PITCH = 55;
+const ROW_PITCH = 52;
 const BRANCH_X0 = OX + 55;
 
 function blockKind(c: CircuitSpec): SymbolKind {
@@ -41,7 +42,7 @@ export function generateLvFace(panel: LvPanelSpec, meta: ProjectMeta): GenResult
 
   const rows = faceRows(panel);
   const nRows = rows.length;
-  const rowCenterY = (r: number) => OY + 20 + r * ROW_PITCH;
+  const rowCenterY = (r: number) => OY + 22 + r * ROW_PITCH;
 
   // 主幹
   const mainY = nRows === 2 ? (rowCenterY(0) + rowCenterY(1)) / 2 : rowCenterY(0);
@@ -63,8 +64,9 @@ export function generateLvFace(panel: LvPanelSpec, meta: ProjectMeta): GenResult
       b.text(x, cy - 23, String(c.no), TEXT.body, 'middle');
       b.text(x, cy + 10, `${c.at}A`, c.poles === '1P' ? TEXT.small : TEXT.body, 'middle');
       if (c.breaker === 'ELB') b.text(x, cy + 15, 'E', TEXT.small, 'middle');
-      const nameLines = wrapText(c.loadName, TEXT.small, Math.max(w + 1, 9)).slice(0, 3);
-      b.textLines(x, cy + 24, nameLines, TEXT.small, 'middle', 1.3);
+      // 負荷名は 2 行まで（3 行目は下段の回路番号と接触する）
+      const nameLines = wrapText(c.loadName, TEXT.small, Math.max(w + 1, 9)).slice(0, 2);
+      b.textLines(x, cy + 23, nameLines, TEXT.small, 'middle', 1.3);
       cursor += w + GAP;
       maxX = Math.max(maxX, el.x + w / 2);
     }
@@ -72,7 +74,7 @@ export function generateLvFace(panel: LvPanelSpec, meta: ProjectMeta): GenResult
 
   // 端子バー
   const lastBottom = rowCenterY(nRows - 1) + 20;
-  const barY = lastBottom + 18;
+  const barY = lastBottom + 16;
   const barN = b.el('FACE_BAR', BRANCH_X0 + 30, barY, { labels: ['N'] });
   const barE = b.el('FACE_BAR', BRANCH_X0 + 30 + 70, barY, { labels: ['E'] });
   maxX = Math.max(maxX, barE.x + 30);

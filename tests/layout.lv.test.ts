@@ -12,13 +12,15 @@ const p = sampleProject();
 const l1 = p.panels[0]!;
 
 describe('分電盤 単線結線図', () => {
-  const { diagram: d, warnings } = generateLvSld(l1, p.meta, p.hv.transformers);
+  const pages = generateLvSld(l1, p.meta, p.hv.transformers);
+  const d = pages[0]!.diagram;
 
-  it('回路数ぶんの分岐ブレーカーと負荷矢印がある', () => {
+  it('1 枚に収まり、回路数ぶんの分岐ブレーカーと負荷矢印がある', () => {
+    expect(pages.length).toBe(1);
     const breakers = d.elements.filter((e) => (e.kind === 'MCB' || e.kind === 'ELB') && e.rot === 0);
     expect(breakers.length).toBe(l1.circuits.length);
     expect(d.elements.filter((e) => e.kind === 'LOAD_ARROW').length).toBe(l1.circuits.length);
-    expect(warnings).toEqual([]);
+    expect(pages[0]!.warnings).toEqual([]);
   });
 
   it('主幹は回転配置で、母線は 1 行', () => {
@@ -33,16 +35,34 @@ describe('分電盤 単線結線図', () => {
 
   it('17 回路以上で 2 行目に折り返す', () => {
     const many: LvPanelSpec = { ...l1, circuits: Array.from({ length: 20 }, (_, i) => defaultCircuit(i + 1)) };
-    const r = generateLvSld(many, p.meta, p.hv.transformers);
-    const busYs = new Set(r.diagram.wires.filter((w) => w.style === 'bus' && w.points[0]!.y === w.points[1]!.y).map((w) => w.points[0]!.y));
+    const rs = generateLvSld(many, p.meta, p.hv.transformers);
+    expect(rs.length).toBe(1);
+    const busYs = new Set(
+      rs[0]!.diagram.wires.filter((w) => w.style === 'bus' && w.points[0]!.y === w.points[1]!.y).map((w) => w.points[0]!.y),
+    );
     expect(busYs.size).toBe(2);
-    expect(r.warnings).toEqual([]);
+    expect(rs[0]!.warnings).toEqual([]);
   });
 
-  it('回路数が上限を超えると警告', () => {
-    const many: LvPanelSpec = { ...l1, circuits: Array.from({ length: 40 }, (_, i) => defaultCircuit(i + 1)) };
-    const r = generateLvSld(many, p.meta, p.hv.transformers);
-    expect(r.warnings.length).toBeGreaterThan(0);
+  it('用紙に収まらない回路は次ページへ送られ、1 回路も欠落しない', () => {
+    const many: LvPanelSpec = { ...l1, circuits: Array.from({ length: 80 }, (_, i) => defaultCircuit(i + 1)) };
+    const rs = generateLvSld(many, p.meta, p.hv.transformers);
+    expect(rs.length).toBeGreaterThan(1);
+    const drawn = rs.flatMap((r) => r.diagram.elements.filter((e) => e.kind === 'LOAD_ARROW').length).reduce((a, b) => a + b, 0);
+    expect(drawn).toBe(80);
+    expect(rs[0]!.warnings.some((w) => w.includes('分割'))).toBe(true);
+    expect(new Set(rs.map((r) => r.diagram.id)).size).toBe(rs.length);
+    expect(rs[0]!.diagram.pageCount).toBe(rs.length);
+    // 2 枚目以降は主幹を描かない
+    expect(rs[1]!.diagram.elements.some((e) => e.rot === 270)).toBe(false);
+    expect(rs[1]!.diagram.texts.some((t) => t.text.includes('続き'))).toBe(true);
+  });
+
+  it('A4 でも回路が欠落しない', () => {
+    const meta = { ...p.meta, sheet: { ...p.meta.sheet, size: 'A4' as const } };
+    const rs = generateLvSld(l1, meta, p.hv.transformers);
+    const drawn = rs.reduce((s, r) => s + r.diagram.elements.filter((e) => e.kind === 'LOAD_ARROW').length, 0);
+    expect(drawn).toBe(l1.circuits.length);
   });
 
   it('回路ラベルに No と負荷名が含まれる', () => {
@@ -77,6 +97,43 @@ describe('盤面配置図', () => {
     expect(warnings).toEqual([]);
     const g = sheetGeom(d.sheet);
     for (const e of d.elements) expect(e.x).toBeLessThanOrEqual(g.drawable.x2);
+  });
+
+  it('A3 / A4 とも盤外形が描画領域（表題欄の外）に収まる', () => {
+    for (const size of ['A3', 'A4'] as const) {
+      const meta = { ...p.meta, sheet: { ...p.meta.sheet, size } };
+      for (const panel of p.panels) {
+        const { diagram: d, warnings } = generateLvFace(panel, meta);
+        const g = sheetGeom(d.sheet);
+        const ys: number[] = [];
+        const xs: number[] = [];
+        for (const s of d.shapes) {
+          if (s.t === 'polyline') for (const q of s.pts) { ys.push(q.y); xs.push(q.x); }
+        }
+        expect(Math.max(...ys), `${panel.name} ${size} の盤外形が描画領域を超える`).toBeLessThanOrEqual(g.drawable.y2);
+        expect(Math.max(...xs)).toBeLessThanOrEqual(g.drawable.x2);
+        expect(Math.min(...ys)).toBeGreaterThanOrEqual(g.drawable.y1);
+        expect(warnings).toEqual([]);
+      }
+    }
+  });
+
+  it('上段の負荷名と下段の回路番号が重ならない', () => {
+    for (const size of ['A3', 'A4'] as const) {
+      const meta = { ...p.meta, sheet: { ...p.meta.sheet, size } };
+      const { diagram: d } = generateLvFace(l1, meta);
+      const blocks = d.elements.filter((e) => e.kind.startsWith('FACE_BR'));
+      const rowYs = [...new Set(blocks.map((e) => e.y))].sort((a, b) => a - b);
+      expect(rowYs.length).toBe(2);
+      const [top, bottom] = rowYs as [number, number];
+      // 下段の回路番号（ブロック上 23mm）の上端
+      const numberTop = bottom - 23 - 2.5 / 2;
+      // 上段ブロックより下にあるテキスト（AT 値と負荷名）の下端
+      const upperBottom = Math.max(
+        ...d.texts.filter((t) => t.y > top && t.y < numberTop).map((t) => t.y + t.h / 2),
+      );
+      expect(upperBottom, `${size}: 上段の負荷名が下段の回路番号に接触`).toBeLessThan(numberTop);
+    }
   });
 
   it('同一行のブロックは重ならない', () => {

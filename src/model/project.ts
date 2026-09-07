@@ -1,12 +1,22 @@
 import type { Diagram, Project } from './types';
 import { isPortEnd } from './types';
 import { getSymbol, isSymbolKind } from '../symbols';
+import { safeFileName } from '../export/download';
 import { defaultHv, defaultMeta, defaultPanel } from './defaults';
 
 export const FILE_EXT = '.elec.json';
 
 export function serialize(project: Project): string {
   return JSON.stringify(project, null, 2);
+}
+
+/**
+ * 保存ファイル名。ブラウザや CAD が非 ASCII のダウンロード名を落とす場合があるため
+ * 図番（ASCII 想定）を基準にする。
+ */
+export function projectFileName(project: Project): string {
+  const base = safeFileName(project.meta.drawingNo || 'project', true);
+  return `${base}${FILE_EXT}`;
 }
 
 class ParseError extends Error {}

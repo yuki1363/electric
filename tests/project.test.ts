@@ -1,7 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { parse, serialize } from '../src/model/project';
+import { parse, projectFileName, serialize } from '../src/model/project';
+import { safeFileName } from '../src/export/download';
 import { regenerateAll } from '../src/layout';
 import { sampleProject } from '../src/model/defaults';
+
+describe('safeFileName', () => {
+  it('パスに使えない文字と空白を置換', () => {
+    expect(safeFileName('a/b:c*d?e"f<g>h|i')).toBe('a_b_c_d_e_f_g_h_i');
+    expect(safeFileName('回路 表')).toBe('回路_表');
+  });
+
+  it('asciiOnly で非 ASCII を落とす', () => {
+    expect(safeFileName('E-001_分電盤 L-1', true)).toBe('E-001_L-1');
+    expect(safeFileName('高圧受電設備', true)).toBe('drawing');
+  });
+
+  it('前後のアンダースコアと連続を整理', () => {
+    expect(safeFileName('__a___b__')).toBe('a_b');
+  });
+});
 
 describe('プロジェクト JSON', () => {
   it('往復で同一になる', () => {
@@ -32,6 +49,13 @@ describe('プロジェクト JSON', () => {
     const raw = JSON.parse(serialize(p));
     raw.diagrams[0].wires[0].from = { elementId: 'nope', portId: 'S' };
     expect(() => parse(JSON.stringify(raw))).toThrow(/存在しない要素/);
+  });
+
+  it('保存ファイル名は図番ベースの ASCII', () => {
+    const p = sampleProject();
+    expect(projectFileName(p)).toBe('E-001.elec.json');
+    expect(projectFileName({ ...p, meta: { ...p.meta, drawingNo: '' } })).toBe('project.elec.json');
+    expect(projectFileName({ ...p, meta: { ...p.meta, drawingNo: '図面 1' } })).toBe('1.elec.json');
   });
 
   it('欠けたフィールドは既定値で補完', () => {

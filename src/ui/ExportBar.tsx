@@ -6,18 +6,29 @@ import { writeDxf, type DxfCodepage } from '../export/dxf';
 import { encodeDxf } from '../export/dxfEncode';
 import { openPrint } from '../export/print';
 import { downloadBlob, safeFileName } from '../export/download';
-import { FILE_EXT, serialize } from '../model/project';
+import { projectFileName, serialize } from '../model/project';
 
 export function ExportBar({ project }: { project: Project }) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(project.diagrams.map((d) => d.id)));
   const [codepage, setCodepage] = useState<DxfCodepage>('sjis');
   const [withFrame, setWithFrame] = useState(true);
+  const [busy, setBusy] = useState(false);
 
   const targets = project.diagrams.filter((d) => selected.has(d.id));
   const title = (d: Project['diagrams'][number]) =>
     withFrame ? titleInfoFromMeta(project.meta, d.title, d.page, d.pageCount) : undefined;
-  const fileBase = (d: Project['diagrams'][number]) =>
-    safeFileName(`${project.meta.drawingNo || 'DWG'}_${d.title}${d.pageCount ? `_${d.page}` : ''}`);
+
+  /**
+   * CAD や OS で扱いやすいよう、ファイル名は ASCII のみで組み立てる。
+   * 例: E-001_hv-sld.dxf / E-001_lv-schedule_L-1_p2.dxf
+   */
+  const fileBase = (d: Project['diagrams'][number]) => {
+    const panel = d.sourceId ? project.panels.find((p) => p.id === d.sourceId) : undefined;
+    const parts = [project.meta.drawingNo || 'DWG', d.kind];
+    if (panel) parts.push(panel.name);
+    if (d.pageCount && d.pageCount > 1) parts.push(`p${d.page}`);
+    return safeFileName(parts.join('_'), true);
+  };
 
   const toggle = (id: string) =>
     setSelected((s) => {
@@ -30,16 +41,23 @@ export function ExportBar({ project }: { project: Project }) {
   const exportSvg = () => {
     for (const d of targets) downloadBlob(`${fileBase(d)}.svg`, diagramToSvg(d, title(d)), 'image/svg+xml');
   };
-  const exportDxf = () => {
-    for (const d of targets) {
-      const text = writeDxf(d, { title: title(d), codepage });
-      downloadBlob(`${fileBase(d)}.dxf`, encodeDxf(text, codepage), 'application/dxf');
+  const exportDxf = async () => {
+    setBusy(true);
+    try {
+      for (const d of targets) {
+        const text = writeDxf(d, { title: title(d), codepage });
+        downloadBlob(`${fileBase(d)}.dxf`, await encodeDxf(text, codepage), 'application/dxf');
+      }
+    } catch (e) {
+      alert(`DXF の出力に失敗しました: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
     }
   };
   const print = () => {
     openPrint(targets.map((d) => ({ svg: diagramToSvg(d, title(d)), size: d.sheet.size })));
   };
-  const exportJson = () => downloadBlob(`${safeFileName(project.meta.name)}${FILE_EXT}`, serialize(project), 'application/json');
+  const exportJson = () => downloadBlob(projectFileName(project), serialize(project), 'application/json');
 
   return (
     <div className="export">
@@ -67,6 +85,10 @@ export function ExportBar({ project }: { project: Project }) {
         <label className="check">
           <input type="checkbox" checked={withFrame} onChange={(e) => setWithFrame(e.target.checked)} /> 図枠・表題欄を含める
         </label>
+        <p className="muted">
+          ファイル名は図番と図面種別から作ります（例: {targets[0] ? `${fileBase(targets[0])}.dxf` : 'E-001_hv-sld.dxf'}）。
+          2 枚以上をまとめて出力すると、ブラウザが「複数のファイルのダウンロード」の許可を尋ねることがあります。
+        </p>
       </section>
 
       <section className="form-section">
@@ -93,8 +115,8 @@ export function ExportBar({ project }: { project: Project }) {
             <option value="utf8">UTF-8（一部 CAD 向け・互換性は環境依存）</option>
           </select>
         </div>
-        <button disabled={targets.length === 0} onClick={exportDxf}>
-          DXF をダウンロード（{targets.length} ファイル）
+        <button disabled={targets.length === 0 || busy} onClick={exportDxf}>
+          {busy ? '出力中…' : `DXF をダウンロード（${targets.length} ファイル）`}
         </button>
       </section>
 
