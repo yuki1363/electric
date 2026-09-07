@@ -1,0 +1,5 @@
+#print-root { display: none; }
+@media print {
+  #app { display: none !important; }
+  #print-root { display: block; }
+}
