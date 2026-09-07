@@ -15,14 +15,15 @@ export const ARC = (cx: number, cy: number, r: number, start: number, end: numbe
   end,
 });
 
-export const PL = (pts: [number, number][], closed = false, fill = false): Prim => ({
+export const PL = (pts: [number, number][], closed = false, fill = false, stroke?: StrokeClass): Prim => ({
   t: 'polyline',
   pts: pts.map(([x, y]) => ({ x, y })),
   ...(closed ? { closed: true } : {}),
   ...(fill ? { fill: true } : {}),
+  ...(stroke ? { stroke } : {}),
 });
 
-export const RECT = (x1: number, y1: number, x2: number, y2: number, fill = false): Prim =>
+export const RECT = (x1: number, y1: number, x2: number, y2: number, fill = false, stroke?: StrokeClass): Prim =>
   PL(
     [
       [x1, y1],
@@ -32,6 +33,7 @@ export const RECT = (x1: number, y1: number, x2: number, y2: number, fill = fals
     ],
     true,
     fill,
+    stroke,
   );
 
 export const T = (
