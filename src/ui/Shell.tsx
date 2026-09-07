@@ -1,5 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { Point } from '../symbols/types';
 import type { Project } from '../model/types';
+import type { Tool } from './canvas/types';
+import { Palette } from './panels/Palette';
+import { PropertiesPanel } from './panels/PropertiesPanel';
 import type { AppState } from '../state/reducer';
 import { canRedo, canUndo } from '../state/history';
 import { useDispatch } from '../state/context';
@@ -23,10 +27,28 @@ export function Shell({ state }: { state: AppState }) {
   const [specNav, setSpecNav] = useState<string>('meta');
   const [activeDiagramId, setActiveDiagramId] = useState<string>(project.diagrams[0]?.id ?? '');
   const [message, setMessage] = useState<string>('');
+  const [selection, setSelection] = useState<string[]>([]);
+  const [tool, setTool] = useState<Tool>('select');
+  const viewCenter = useRef<Point>({ x: 210, y: 148 });
+  const onViewChange = useCallback((c: Point) => {
+    viewCenter.current = c;
+  }, []);
 
   useEffect(() => {
     if (!project.diagrams.some((d) => d.id === activeDiagramId)) setActiveDiagramId(project.diagrams[0]?.id ?? '');
   }, [project.diagrams, activeDiagramId]);
+
+  // 図面が差し替わったら存在しない選択を除去
+  const activeForSel = project.diagrams.find((d) => d.id === activeDiagramId);
+  useEffect(() => {
+    if (!activeForSel || selection.length === 0) return;
+    const ids = new Set([
+      ...activeForSel.elements.map((e) => e.id),
+      ...activeForSel.wires.map((w) => w.id),
+      ...activeForSel.texts.map((t) => t.id),
+    ]);
+    if (selection.some((id) => !ids.has(id))) setSelection(selection.filter((id) => ids.has(id)));
+  }, [activeForSel, selection]);
 
   const anyStale = project.diagrams.some((d) => d.stale);
 
@@ -129,12 +151,42 @@ export function Shell({ state }: { state: AppState }) {
       {tab === 'draw' && (
         <main className="app-main draw">
           <aside className="side left">
-            <DiagramList diagrams={project.diagrams} activeId={activeDiagramId} onSelect={setActiveDiagramId} />
+            <DiagramList
+              diagrams={project.diagrams}
+              activeId={activeDiagramId}
+              onSelect={(id) => {
+                setActiveDiagramId(id);
+                setSelection([]);
+              }}
+            />
+            {active && (
+              <Palette
+                diagramId={active.id}
+                getViewCenter={() => viewCenter.current}
+                onAdded={(id) => setSelection([id])}
+                tool={tool}
+                onToolChange={setTool}
+              />
+            )}
           </aside>
           {active ? (
-            <Canvas key={active.id} diagram={active} title={titleInfoFromMeta(project.meta, active.title, active.page, active.pageCount)} />
+            <Canvas
+              key={active.id}
+              diagram={active}
+              title={titleInfoFromMeta(project.meta, active.title, active.page, active.pageCount)}
+              selection={selection}
+              onSelectionChange={setSelection}
+              tool={tool}
+              onToolChange={setTool}
+              onViewChange={onViewChange}
+            />
           ) : (
             <div className="empty">図面がありません</div>
+          )}
+          {active && (
+            <aside className="side right">
+              <PropertiesPanel diagram={active} selection={selection} onSelectionChange={setSelection} />
+            </aside>
           )}
         </main>
       )}

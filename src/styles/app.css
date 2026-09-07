@@ -89,3 +89,23 @@ input[type=text], input[type=number], input[type=date], select { font: inherit; 
 .badge.edited { background: #e3f2fd; color: #0d47a1; }
 .empty { flex: 1; display: flex; align-items: center; justify-content: center; color: #777; }
 .app-main.export { padding: 16px; flex-direction: column; background: #fff; }
+
+/* 編集キャンバス */
+.canvas-host.tool-wire, .canvas-host.tool-text { cursor: crosshair; }
+.hit-el:hover, .hit-text:hover, .hit-label:hover { stroke: var(--accent); stroke-width: 0.3; }
+.hit-wire:hover { stroke: var(--accent); stroke-opacity: .35; }
+.port { cursor: pointer; }
+.tool-hint { color: var(--accent); margin-right: 8px; }
+.side.left { display: flex; flex-direction: column; gap: 8px; }
+.palette details { border-top: 1px solid var(--border); padding-top: 4px; }
+.palette summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.palette-tools { display: flex; gap: 4px; margin-bottom: 6px; }
+.palette-tools button.active, .props button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.palette-grid { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 0; }
+.palette-item { display: flex; flex-direction: column; align-items: center; width: 52px; padding: 3px 2px; font-size: 9px; gap: 2px; }
+.palette-item svg { color: #000; }
+.props h3 { font-size: 13px; margin: 4px 0 8px; }
+.props .form-label { width: 90px; }
+.props textarea { font: inherit; width: 100%; border: 1px solid var(--border); border-radius: 3px; }
+.props .small { font-size: 11px; word-break: break-all; }
+.btn-row { display: flex; gap: 4px; margin-top: 8px; }
