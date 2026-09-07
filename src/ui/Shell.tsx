@@ -3,6 +3,7 @@ import type { Point } from '../symbols/types';
 import type { Project } from '../model/types';
 import type { Tool } from './canvas/types';
 import { Palette } from './panels/Palette';
+import { ExportBar } from './ExportBar';
 import { PropertiesPanel } from './panels/PropertiesPanel';
 import type { AppState } from '../state/reducer';
 import { canRedo, canUndo } from '../state/history';
@@ -193,7 +194,7 @@ export function Shell({ state }: { state: AppState }) {
 
       {tab === 'export' && (
         <main className="app-main export">
-          <p className="muted">出力機能は次の段階で追加します。</p>
+          <ExportBar project={project} />
         </main>
       )}
     </div>

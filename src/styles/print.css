@@ -1,5 +1,11 @@
 #print-root { display: none; }
+
 @media print {
+  html, body { margin: 0; padding: 0; background: #fff; }
   #app { display: none !important; }
   #print-root { display: block; }
+  .print-page { width: 420mm; height: 297mm; overflow: hidden; page-break-after: always; break-after: page; }
+  .print-page.A4 { width: 297mm; height: 210mm; }
+  .print-page:last-child { page-break-after: auto; break-after: auto; }
+  .print-page svg { display: block; width: 100%; height: 100%; }
 }

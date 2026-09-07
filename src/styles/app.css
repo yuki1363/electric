@@ -109,3 +109,8 @@ input[type=text], input[type=number], input[type=date], select { font: inherit; 
 .props textarea { font: inherit; width: 100%; border: 1px solid var(--border); border-radius: 3px; }
 .props .small { font-size: 11px; word-break: break-all; }
 .btn-row { display: flex; gap: 4px; margin-top: 8px; }
+
+/* 出力 */
+.export { max-width: 800px; overflow: auto; }
+.export-list { list-style: none; padding: 0; margin: 6px 0; }
+.export-list li { padding: 2px 0; }
