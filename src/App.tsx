@@ -1,4 +1,9 @@
+import { SymbolGallery } from './ui/SymbolGallery';
+
 export function App() {
+  if (new URLSearchParams(location.search).has('gallery')) {
+    return <SymbolGallery />;
+  }
   return (
     <div className="app-shell">
       <h1>電気図面作成</h1>
