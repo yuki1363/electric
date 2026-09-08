@@ -2,6 +2,7 @@ import type {
   CapacitorSpec,
   HvFeederSpec,
   HvSlot,
+  HvSwitch,
   HvSpec,
   LvPanelSpec,
   Nameplate,
@@ -48,6 +49,18 @@ const SLOT_OF_DEVICE: [string, HvSlot][] = [
   ['LBS', 'lbs'],
   ['PF', 'pf'],
 ];
+
+/**
+ * 台帳の行から開閉方式を決める。
+ * VCB があれば VCB、無ければ LBS / VCS の有無で組み合わせを選ぶ。
+ */
+function switchOf(rows: { vcb?: ParsedRow; lbs?: ParsedRow; vcs?: ParsedRow }): HvSwitch {
+  if (rows.vcb) return 'VCB';
+  if (rows.lbs && rows.vcs) return 'LBS+VCS';
+  if (rows.vcs) return 'VCS';
+  if (rows.lbs) return 'LBS';
+  return 'PC';
+}
 
 function slotOf(deviceName: string): HvSlot | undefined {
   const k = keyOf(deviceName);
@@ -176,6 +189,7 @@ export function buildImportPlan(rows: ParsedRow[]): ImportPlan {
     if (kind === 'feeder') {
       const vcb = gRows.find((r) => isDevice(r, 'VCB'));
       const lbs = gRows.find((r) => isDevice(r, 'LBS'));
+      const vcs = gRows.find((r) => isDevice(r, 'VCS'));
       const pf = gRows.find((r) => isDevice(r, 'PF'));
       const ct = gRows.find((r) => isDevice(r, 'CT'));
       const ocr = gRows.find((r) => isDevice(r, 'OCR'));
@@ -183,18 +197,19 @@ export function buildImportPlan(rows: ParsedRow[]): ImportPlan {
       const nameplates: Record<string, Nameplate> = {};
       if (vcb) nameplates.vcb = toNameplate(vcb);
       if (lbs) nameplates.lbs = toNameplate(lbs);
+      if (vcs) nameplates.vcs = toNameplate(vcs);
       if (pf) nameplates.pf = toNameplate(pf);
       if (ct) nameplates.ct = toNameplate(ct);
       if (ocr) nameplates.ocr = toNameplate(ocr);
       if (cable) nameplates.cable = toNameplate(cable);
-      for (const r of [vcb, lbs, pf, ct, ocr, cable]) if (r) use(r);
+      for (const r of [vcb, lbs, vcs, pf, ct, ocr, cable]) if (r) use(r);
 
       const sq = cable ? (cable.note.match(/(\d+(?:\.\d+)?)\s*sq/i) ?? [])[1] : undefined;
       plan.feeders.push({
         id: newId('fdr'),
         name,
-        breaker: vcb ? 'VCB' : 'LBS',
-        ratedA: (vcb ?? lbs)?.rating.a ?? 600,
+        breaker: vcb || lbs || vcs ? switchOf({ vcb, lbs, vcs }) : 'LBS',
+        ratedA: (vcb ?? lbs ?? vcs)?.rating.a ?? 600,
         ...(vcb?.rating.ka ? { breakingKA: vcb.rating.ka } : {}),
         ...(!vcb && pf?.rating.a ? { pfA: pf.rating.a } : {}),
         ct: !!ct,
@@ -210,6 +225,7 @@ export function buildImportPlan(rows: ParsedRow[]): ImportPlan {
       const sc = gRows.find((r) => isDevice(r, 'SC'));
       const sr = gRows.find((r) => isDevice(r, 'SR'));
       const lbs = gRows.find((r) => isDevice(r, 'LBS'));
+      const vcs = gRows.find((r) => isDevice(r, 'VCS'));
       const pf = gRows.find((r) => isDevice(r, 'PF'));
       if (sc) use(sc);
       plan.capacitors.push({
@@ -217,7 +233,7 @@ export function buildImportPlan(rows: ParsedRow[]): ImportPlan {
         name,
         kvar: sc?.rating.kvar ?? 50,
         sr: !!sr,
-        switch: lbs ? 'LBS' : 'PC',
+        switch: switchOf({ lbs, vcs }),
         pfA: pf?.rating.a ?? 30,
         ...(sc ? { nameplate: toNameplate(sc) } : {}),
       });
@@ -228,6 +244,7 @@ export function buildImportPlan(rows: ParsedRow[]): ImportPlan {
       // 低圧系のグループは「変圧器 + 高圧側の開閉器」。盤そのものも 1 面作る
       const trs = gRows.filter((r) => isDevice(r, 'Tr', '変圧器', 'T'));
       const lbs = gRows.find((r) => isDevice(r, 'LBS'));
+      const vcs = gRows.find((r) => isDevice(r, 'VCS'));
       const pf = gRows.find((r) => isDevice(r, 'PF'));
       const panelId = newId('panel');
       let linked = false;
@@ -240,7 +257,7 @@ export function buildImportPlan(rows: ParsedRow[]): ImportPlan {
           phase: phaseOf(r.ratingText),
           kva: r.rating.kva ?? 0,
           secondary: secondary ?? '210V',
-          switch: lbs ? 'LBS' : 'PC',
+          switch: switchOf({ lbs, vcs }),
           pfA: pf?.rating.a ?? 30,
           ...(linked ? {} : { feeds: panelId }),
           nameplate: toNameplate(r),

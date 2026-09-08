@@ -191,6 +191,83 @@ describe('高圧受電設備 単線結線図 生成', () => {
   });
 });
 
+describe('開閉装置の種類', () => {
+  const p = sampleProject();
+  /** 分岐 1 台ぶんの縦に並ぶ機器を上から順に返す */
+  const column = (spec: Partial<(typeof p.hv.capacitors)[number]>) => {
+    const hv = { ...p.hv, transformers: [], capacitors: [{ ...p.hv.capacitors[0]!, ...spec }] };
+    const d = generateHvSld(hv, p.meta, p.panels)[0]!.diagram;
+    const busY = d.wires.find((w) => w.style === 'bus')!.points[0]!.y;
+    const cx = d.elements.find((e) => e.kind === 'SC')!.x; // 枠外の A 種接地を除くため列で絞る
+    return d.elements
+      .filter((e) => e.y > busY && e.x === cx && e.kind !== 'JUNCTION')
+      .sort((a, b) => a.y - b.y)
+      .map((e) => e.kind);
+  };
+
+  it('LBS+VCS は LBS → PF → VCS の順に直列で描く', () => {
+    expect(column({ switch: 'LBS+VCS', sr: true })).toEqual(['LBS', 'PF', 'VCS', 'SR', 'SC', 'GROUND_A']);
+  });
+
+  it('VCB / VCS / PC はその 1 台だけを描く', () => {
+    expect(column({ switch: 'VCB', sr: false })).toEqual(['VCB', 'SC', 'GROUND_A']);
+    expect(column({ switch: 'VCS', sr: false })).toEqual(['VCS', 'SC', 'GROUND_A']);
+    expect(column({ switch: 'PC', sr: false })).toEqual(['PC', 'SC', 'GROUND_A']);
+    expect(column({ switch: 'LBS', sr: false })).toEqual(['LBS', 'PF', 'SC', 'GROUND_A']);
+  });
+
+  it('配線は直交してポート位置に一致する', () => {
+    const hv = { ...p.hv, capacitors: [{ ...p.hv.capacitors[0]!, switch: 'LBS+VCS' as const }] };
+    const d = generateHvSld(hv, p.meta, p.panels)[0]!.diagram;
+    for (const w of d.wires) {
+      expect(isOrthogonal(w.points)).toBe(true);
+      for (const end of [w.from, w.to]) {
+        if (!isPortEnd(end)) continue;
+        const el = d.elements.find((e) => e.id === end.elementId)!;
+        const wp = elementPort(el, end.portId).p;
+        const pt = end === w.from ? w.points[0]! : w.points[w.points.length - 1]!;
+        expect(pt.x).toBeCloseTo(wp.x, 6);
+        expect(pt.y).toBeCloseTo(wp.y, 6);
+      }
+    }
+  });
+
+  it('分岐盤の遮断/開閉にも同じ種類を選べる', () => {
+    const feeder = {
+      id: 'f1',
+      name: '高圧分岐盤No.1 F1',
+      breaker: 'LBS+VCS' as const,
+      ratedA: 200,
+      pfA: 30,
+      ct: true,
+      ctRatio: '75/5A',
+      ocr: true,
+    };
+    const hv = { ...p.hv, feeders: [feeder], transformers: [], capacitors: [] };
+    const d = generateHvSld(hv, p.meta, p.panels)[0]!.diagram;
+    const busY = d.wires.find((w) => w.style === 'bus')!.points[0]!.y;
+    const col = d.elements
+      .filter((e) => e.y > busY && e.kind !== 'JUNCTION' && e.kind !== 'OCR')
+      .sort((a, b) => a.y - b.y)
+      .map((e) => e.kind);
+    expect(col.slice(0, 3)).toEqual(['LBS', 'PF', 'VCS']);
+    // 定格は主となる機器に、ヒューズ定格は PF に付く
+    const lbs = d.elements.find((e) => e.kind === 'LBS' && e.y > busY)!;
+    expect(lbs.labels).toContain('LBS 200A');
+    expect(d.elements.find((e) => e.kind === 'PF' && e.y > busY)!.labels).toContain('PF 30A');
+  });
+
+  it('VCS の分岐盤ではヒューズを描かない', () => {
+    const feeder = { id: 'f1', name: 'F1', breaker: 'VCS' as const, ratedA: 200, ct: false, ocr: false };
+    const hv = { ...p.hv, feeders: [feeder], transformers: [], capacitors: [] };
+    const d = generateHvSld(hv, p.meta, p.panels)[0]!.diagram;
+    const busY = d.wires.find((w) => w.style === 'bus')!.points[0]!.y;
+    const kinds = d.elements.filter((e) => e.y > busY).map((e) => e.kind);
+    expect(kinds).toContain('VCS');
+    expect(kinds).not.toContain('PF');
+  });
+});
+
 describe('高圧分岐盤', () => {
   const p = sampleProject();
   const feeders = [

@@ -162,6 +162,18 @@ export const LA: SymbolDef = {
   defaultLabels: ['LA'],
 };
 
+/** 真空電磁接触器 VCS: 開閉器の固定接点に半円（接触器の記号） */
+export const VCS: SymbolDef = {
+  kind: 'VCS',
+  nameJa: '真空電磁接触器 (VCS)',
+  category: 'hv',
+  bbox: { w: 12, h: 20 },
+  prims: [...bladePrims(), ARC(0, -4, 2, 180, 360)],
+  ports: portsNS(),
+  labelAnchor: rightLabel(12),
+  defaultLabels: ['VCS'],
+};
+
 /** 変流器 CT: 導体を囲む円、二次側は E へ */
 export const CT: SymbolDef = {
   kind: 'CT',
@@ -298,6 +310,7 @@ export const HV_SYMBOLS: SymbolDef[] = [
   DS,
   VCB,
   LBS,
+  VCS,
   PC,
   PF,
   LA,

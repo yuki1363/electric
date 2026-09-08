@@ -1,4 +1,5 @@
 import type { HvSlot, Nameplate, Project } from './types';
+import { switchDevices } from './switchgear';
 
 /** 銘板表 1 行分。すべて表示用の文字列に落としてある */
 export interface NameplateRow {
@@ -70,11 +71,15 @@ export function nameplateRows(project: Project): NameplateRow[] {
 
     for (const f of hv.feeders) {
       const fnp = (k: string) => f.nameplates?.[k];
-      if (f.breaker === 'VCB') {
-        out.push(row('VCB', fnp('vcb'), `7.2kV ${f.ratedA}A${f.breakingKA ? ` ${f.breakingKA}kA` : ''}`, f.name));
-      } else {
-        out.push(row('LBS', fnp('lbs'), `7.2kV ${f.ratedA}A`, f.name));
-        if (f.pfA) out.push(row('PF', fnp('pf'), `7.2kV ${f.pfA}A`, f.name));
+      for (const dev of switchDevices(f.breaker)) {
+        if (dev === 'PF' || dev === 'PC') {
+          if (dev === 'PF' && !f.pfA) continue;
+          out.push(row(dev, fnp(dev.toLowerCase()), `7.2kV ${f.pfA ?? f.ratedA}A`, f.name));
+        } else if (dev === 'VCB') {
+          out.push(row('VCB', fnp('vcb'), `7.2kV ${f.ratedA}A${f.breakingKA ? ` ${f.breakingKA}kA` : ''}`, f.name));
+        } else {
+          out.push(row(dev, fnp(dev.toLowerCase()), `7.2kV ${f.ratedA}A`, f.name));
+        }
       }
       if (f.ct) out.push(row('CT', fnp('ct'), f.ctRatio ?? '', f.name));
       if (f.ocr) out.push(row('OCR', fnp('ocr'), '', f.name));

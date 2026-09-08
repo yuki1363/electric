@@ -1,4 +1,5 @@
 import type { Element, HvSpec, LvPanelSpec, ProjectMeta } from '../model/types';
+import { type SwitchDevice, switchDevices } from '../model/switchgear';
 import type { SymbolKind as SK } from '../symbols/types';
 import { DiagramBuilder } from './builder';
 import { GRID, TEXT, sheetGeom } from './constants';
@@ -28,6 +29,14 @@ const METER_CIRCUIT: Record<MeterKind, { v: boolean; c: boolean }> = {
   METER_PF: { v: true, c: true },
   METER_WH: { v: true, c: true },
 };
+
+/** 分岐盤の開閉装置に添えるラベル（定格を持つのは主となる機器だけ） */
+function feederDeviceLabels(dev: SwitchDevice, f: HvSpec['feeders'][number]): string[] {
+  if (dev === 'PF') return [`PF ${f.pfA}A`];
+  if (dev === 'PC') return [`PC ${f.pfA ?? f.ratedA}A`];
+  if (dev === 'VCB') return [`VCB ${f.ratedA}A`, f.breakingKA ? `${f.breakingKA}kA` : ''].filter(Boolean);
+  return [`${dev} ${f.ratedA}A`];
+}
 
 type Leaf =
   | { kind: 'tr'; spec: HvSpec['transformers'][number] }
@@ -316,25 +325,16 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     const j = b.el('JUNCTION', cx, busY);
     let last: Element = j;
 
-    if (f.breaker === 'VCB') {
-      const vcb = b.el('VCB', cx, yy + 20, {
-        labels: withModel([`VCB ${f.ratedA}A`, f.breakingKA ? `${f.breakingKA}kA` : ''].filter(Boolean), fnp('vcb')),
-        props: { ratedA: f.ratedA },
+    for (const dev of switchDevices(f.breaker)) {
+      // 限流ヒューズは定格が入っているときだけ描く
+      if (dev === 'PF' && !f.pfA) continue;
+      const el = b.el(dev, cx, yy + 20, {
+        labels: withModel(feederDeviceLabels(dev, f), fnp(dev.toLowerCase())),
+        ...(dev === 'PF' || dev === 'PC' ? {} : { props: { ratedA: f.ratedA } }),
       });
-      b.wire(last, 'S', vcb, 'N');
-      last = vcb;
+      b.wire(last, 'S', el, 'N');
+      last = el;
       yy += 20;
-    } else {
-      const lbs = b.el('LBS', cx, yy + 20, { labels: withModel([`LBS ${f.ratedA}A`], fnp('lbs')) });
-      b.wire(last, 'S', lbs, 'N');
-      last = lbs;
-      yy += 20;
-      if (f.pfA) {
-        const pf = b.el('PF', cx, yy + 20, { labels: withModel([`PF ${f.pfA}A`], fnp('pf')) });
-        b.wire(last, 'S', pf, 'N');
-        last = pf;
-        yy += 20;
-      }
     }
 
     if (f.ct) {
@@ -382,17 +382,14 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
 
   /** 1 台ぶんの分岐（開閉器 → PF → 変圧器/コンデンサ）を描く */
   const drawLeaf = (leaf: Leaf, bx: number, topY: number) => {
-    const j = b.el('JUNCTION', bx, topY);
-    const sw = b.el(leaf.spec.switch, bx, topY + 15, {
-      labels: [leaf.spec.switch === 'PC' ? `PC ${leaf.spec.pfA}A` : 'LBS'],
-    });
-    b.wire(j, 'S', sw, 'N');
-    let last: Element = sw;
-    let yy = topY + 15;
-    if (leaf.spec.switch === 'LBS') {
-      const pf = b.el('PF', bx, yy + 20, { labels: [`PF ${leaf.spec.pfA}A`] });
-      b.wire(last, 'S', pf, 'N');
-      last = pf;
+    let last: Element = b.el('JUNCTION', bx, topY);
+    let yy = topY - 5;
+    for (const dev of switchDevices(leaf.spec.switch)) {
+      const el = b.el(dev, bx, yy + 20, {
+        labels: [dev === 'PF' || dev === 'PC' ? `${dev} ${leaf.spec.pfA}A` : dev],
+      });
+      b.wire(last, 'S', el, 'N');
+      last = el;
       yy += 20;
     }
 

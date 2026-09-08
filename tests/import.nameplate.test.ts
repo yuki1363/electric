@@ -141,6 +141,7 @@ describe('取り込み計画', () => {
     ['OCR', 'K2CAD03-F4', '', 'オムロン', '2018', '89017', '2F電気室', '高圧分岐盤No.1　F1'],
     ['高圧ケーブル', '', '6600V', '昭和電線', '1996', '', '2F電気室', '高圧分岐盤No.1　F1　38sq'],
     ['LBS', 'LBS-6A/200', '7.2kV200A', '富士電機', '2017.8', '1708', '2F電気室', 'No.1　SC'],
+    ['VCS', 'HK-6/200', '7.2kV200A', '富士電機', '2017.8', 'V1708', '2F電気室', 'No.1　SC'],
     ['PF', 'JC-6/20', '7.2kV　G20', '富士電機', '2017', '174G', '2F電気室', 'No.1　SC'],
     ['SR', 'XTR-ASC7', '3kvar L=6 %  229V', '東芝', '1996', '96023821', '2F電気室', 'No.1　SC'],
     ['SC', 'BRTR-A6NR', '50kvar 6600V  4.37A', '東芝', '1996', '', '2F電気室', 'No.1　SC'],
@@ -176,7 +177,8 @@ describe('取り込み計画', () => {
 
   it('コンデンサは SC / SR / 開閉器をまとめて 1 台にする', () => {
     expect(plan.capacitors.length).toBe(1);
-    expect(plan.capacitors[0]).toMatchObject({ name: 'No.1 SC', kvar: 50, sr: true, switch: 'LBS', pfA: 20 });
+    // LBS + PF + VCS + SR + SC の構成は LBS+VCS として取り込む
+    expect(plan.capacitors[0]).toMatchObject({ name: 'No.1 SC', kvar: 50, sr: true, switch: 'LBS+VCS', pfA: 20 });
   });
 
   it('変圧器の相と二次電圧を定格から読む', () => {
@@ -204,6 +206,23 @@ describe('取り込み計画', () => {
 
   it('分岐盤と変圧器の対応が分からないことを知らせる', () => {
     expect(plan.notes.some((n) => n.includes('所属分岐盤'))).toBe(true);
+  });
+
+  it('分岐盤の VCS も開閉方式に反映する', () => {
+    const s2 = sheet([
+      ['LBS', 'LBS-6A/200', '7.2kV200A', '富士電機', '2017', '1801', '2F電気室', '高圧分岐盤No.9 F9'],
+      ['PF', 'JC-6/30', '7.2kV　G30', '富士電機', '2017', '176G', '2F電気室', '高圧分岐盤No.9 F9'],
+      ['VCS', 'HK-6/200', '7.2kV200A', '富士電機', '2017', 'V1801', '2F電気室', '高圧分岐盤No.9 F9'],
+    ]);
+    const f = buildImportPlan(parseRows(s2, detectHeader(s2.rows)!)).feeders[0]!;
+    expect(f).toMatchObject({ breaker: 'LBS+VCS', ratedA: 200, pfA: 30 });
+    expect(f.nameplates?.vcs?.model).toBe('HK-6/200');
+  });
+
+  it('VCS だけの盤は VCS になる', () => {
+    const s2 = sheet([['VCS', 'HK-6/200', '7.2kV200A', '富士電機', '2017', 'V1', '2F電気室', '高圧分岐盤No.9 F9']]);
+    const f = buildImportPlan(parseRows(s2, detectHeader(s2.rows)!)).feeders[0]!;
+    expect(f.breaker).toBe('VCS');
   });
 
   it('1 行も無ければ何も作らない', () => {

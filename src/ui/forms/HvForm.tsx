@@ -1,5 +1,6 @@
 import type { CapacitorSpec, HvFeederSpec, HvSlot, HvSpec, LvPanelSpec, Nameplate, TransformerSpec } from '../../model/types';
 import { HV_SLOT_LABEL } from '../../model/types';
+import { HV_SWITCHES, HV_SWITCH_LABEL, hasBreakingKA, hasFuse } from '../../model/switchgear';
 import { NameplateDisclosure, NameplateFields } from './NameplateFields';
 import { newId } from '../../model/ids';
 import { useDispatch } from '../../state/context';
@@ -58,6 +59,9 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
 
   /** 未入力のときの既定値。種別だけ入れても断面積が消えないようにする */
   const cableOf = (f: HvFeederSpec) => f.cable ?? { type: 'CVT', sq: 38 };
+
+  /** 変圧器・コンデンサ・分岐盤で共通の開閉装置の選択肢 */
+  const switchOptions = HV_SWITCHES.map((v) => ({ value: v, label: HV_SWITCH_LABEL[v] }));
 
   const setSlotNp = (slot: HvSlot, np: Nameplate) =>
     set({ nameplates: { ...hv.nameplates, [slot]: np } });
@@ -203,18 +207,16 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                   <tr key={f.id}>
                     <td><TextField value={f.name} onCommit={(v) => setFeeder(f.id, { name: v })} width={140} /></td>
                     <td>
-                      <SelectField
-                        value={f.breaker}
-                        options={[{ value: 'VCB', label: 'VCB' }, { value: 'LBS', label: 'LBS+PF' }]}
-                        onChange={(v) => setFeeder(f.id, { breaker: v })}
-                      />
+                      <SelectField value={f.breaker} options={switchOptions} onChange={(v) => setFeeder(f.id, { breaker: v })} />
                     </td>
                     <td><NumberField value={f.ratedA} width={60} onCommit={(v) => setFeeder(f.id, { ratedA: v ?? f.ratedA })} /></td>
                     <td>
-                      {f.breaker === 'VCB' ? (
+                      {hasBreakingKA(f.breaker) ? (
                         <NumberField value={f.breakingKA} step={0.5} width={60} allowEmpty onCommit={(v) => setFeeder(f.id, { breakingKA: v })} />
-                      ) : (
+                      ) : hasFuse(f.breaker) ? (
                         <NumberField value={f.pfA} width={60} allowEmpty onCommit={(v) => setFeeder(f.id, { pfA: v })} />
+                      ) : (
+                        <span className="muted">—</span>
                       )}
                     </td>
                     <td><CheckField checked={f.ct} onChange={(v) => setFeeder(f.id, { ct: v })} label="" /></td>
@@ -283,8 +285,14 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                     <td>
                       <TextField value={t.secondary} width={90} list="secondary-options" onCommit={(v) => setTr(t.id, { secondary: v })} />
                     </td>
-                    <td><SelectField value={t.switch} options={[{ value: 'LBS', label: 'LBS+PF' }, { value: 'PC', label: 'PC' }]} onChange={(v) => setTr(t.id, { switch: v })} /></td>
-                    <td><NumberField value={t.pfA} onCommit={(v) => setTr(t.id, { pfA: v ?? 30 })} width={60} /></td>
+                    <td><SelectField value={t.switch} options={switchOptions} onChange={(v) => setTr(t.id, { switch: v })} /></td>
+                    <td>
+                      {hasFuse(t.switch) ? (
+                        <NumberField value={t.pfA} onCommit={(v) => setTr(t.id, { pfA: v ?? 30 })} width={60} />
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
                     <td>
                       <select value={t.feederId ?? ''} onChange={(e) => setTr(t.id, e.target.value ? { feederId: e.target.value } : { feederId: undefined })}>
                         <option value="">高圧母線に直結</option>
@@ -335,8 +343,14 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                     <td><TextField value={c.name} onCommit={(v) => setSc(c.id, { name: v })} width={70} /></td>
                     <td><NumberField value={c.kvar} onCommit={(v) => setSc(c.id, { kvar: v ?? 50 })} /></td>
                     <td><CheckField checked={c.sr} onChange={(v) => setSc(c.id, { sr: v })} label="SR 6%" /></td>
-                    <td><SelectField value={c.switch} options={[{ value: 'LBS', label: 'LBS+PF' }, { value: 'PC', label: 'PC' }]} onChange={(v) => setSc(c.id, { switch: v })} /></td>
-                    <td><NumberField value={c.pfA} onCommit={(v) => setSc(c.id, { pfA: v ?? 30 })} width={60} /></td>
+                    <td><SelectField value={c.switch} options={switchOptions} onChange={(v) => setSc(c.id, { switch: v })} /></td>
+                    <td>
+                      {hasFuse(c.switch) ? (
+                        <NumberField value={c.pfA} onCommit={(v) => setSc(c.id, { pfA: v ?? 30 })} width={60} />
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
                     <td>
                       <select value={c.feederId ?? ''} onChange={(e) => setSc(c.id, e.target.value ? { feederId: e.target.value } : { feederId: undefined })}>
                         <option value="">高圧母線に直結</option>

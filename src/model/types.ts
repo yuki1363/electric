@@ -91,7 +91,8 @@ export interface NameplateEntry extends Nameplate {
 export type TrPhase = '1φ' | '3φ';
 /** 二次電圧の表記。よく使う値は候補として出すが、440V など任意の値も入れられる */
 export type TrSecondary = string;
-export type HvSwitch = 'LBS' | 'PC';
+export type { HvSwitch } from './switchgear';
+import type { HvSwitch } from './switchgear';
 
 export interface TransformerSpec {
   id: Id;
@@ -128,7 +129,7 @@ export interface HvFeederSpec {
   id: Id;
   /** 例: 高圧分岐盤No.1 F1 */
   name: string;
-  breaker: 'VCB' | 'LBS';
+  breaker: HvSwitch;
   ratedA: number;
   /** VCB の遮断容量 kA */
   breakingKA?: number;
@@ -141,7 +142,7 @@ export interface HvFeederSpec {
   cable?: { type: string; sq: number; lengthM?: number };
   /** 負荷名（配下に機器を置かない場合の行き先表示） */
   loadName?: string;
-  /** vcb / lbs / ct / ocr / cable ごとの銘板 */
+  /** vcb / lbs / pf / vcs / pc / ct / ocr / cable ごとの銘板 */
   nameplates?: Record<string, Nameplate>;
 }
 
