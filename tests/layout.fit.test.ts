@@ -20,9 +20,18 @@ const tr = (i: number, feederId?: string): TransformerSpec => ({
   ...(feederId ? { feederId } : {}),
 });
 
-/** 母線直結の変圧器を n 台持つ仕様（ページ分割で対応できる） */
+/**
+ * 母線直結の変圧器を n 台持つ仕様（ページ分割で対応できる）。
+ * 自動縮尺そのものを見たいので、受電部は計器なしの最小構成にしておく
+ */
 function hvFlat(n: number): HvSpec {
-  return { ...base.hv, feeders: [], transformers: Array.from({ length: n }, (_, i) => tr(i + 1)), capacitors: [] };
+  return {
+    ...base.hv,
+    metering: { vt: false, a: false, v: false, w: false, wh: false, pf: false },
+    feeders: [],
+    transformers: Array.from({ length: n }, (_, i) => tr(i + 1)),
+    capacitors: [],
+  };
 }
 
 /** 1 つの分岐盤に n 台ぶら下げた仕様（1 区画なので分割できず、縮小で対応する） */

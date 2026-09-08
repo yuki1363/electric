@@ -248,7 +248,8 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       tap = b.el('JUNCTION', TX, tapY);
       if (prev) b.wire(prev, 'S', tap, 'N');
       prev = tap;
-      y += 10;
+      // VT を描くときは、引き下げ線の中に VT ヒューズを縦に入れるぶん間隔をあける
+      y += hv.metering.vt ? 30 : 10;
 
       if (hv.la) {
         const la = b.el('LA', TX - 40, tapY + 15, { labels: withModel(['LA'], hv.nameplates?.la) });
@@ -323,11 +324,8 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       const vbusY = mY + 15;
       const vt = hv.metering.vt ? b.el('VT', vx, mY, { labels: withModel(['VT'], hv.nameplates?.vt) }) : null;
       if (vt) {
-        // 引き出し線の途中に横向きで置く（VT ヒューズ）
-        const vtf = b.el('PF', TX + 30, tapY, {
-          rot: 270,
-          labels: withModel(['VTヒューズ'], hv.nameplates?.vtf),
-        });
+        // VT ヒューズは VT の真上、引き下げ線の中に縦に入れる（直列の 2 台が同じ列に並ぶ）
+        const vtf = b.el('PF', vx, mY - 20, { labels: withModel(['VTヒューズ'], hv.nameplates?.vtf) });
         b.wire(tap, 'E', vtf, 'N');
         b.wire(vtf, 'S', vt, 'N');
       }

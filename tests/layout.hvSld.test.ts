@@ -65,8 +65,10 @@ describe('高圧受電設備 単線結線図 生成', () => {
 
     // VT の一次側に限流ヒューズが入る
     const vt = d.elements.find((e) => e.kind === 'VT')!;
-    const vtf = d.elements.find((e) => e.kind === 'PF' && e.rot === 270)!;
+    // VT ヒューズは VT の真上、同じ列に縦に入る
+    const vtf = d.elements.find((e) => e.kind === 'PF' && e.x === vt.x && e.y < vt.y)!;
     expect(vtf).toBeDefined();
+    expect(vt.y - vtf.y).toBe(20); // 直列に接して並ぶ
     expect(
       d.wires.some(
         (w) =>
@@ -149,14 +151,17 @@ describe('高圧受電設備 単線結線図 生成', () => {
     const kinds = rs[0]!.diagram.elements.map((e) => e.kind);
     expect(kinds).not.toContain('VCB');
     expect(kinds).not.toContain('OCR');
-    // 主遮断装置の PF + 分岐ぶん + VT ヒューズ（横向き）
-    const pfs = rs[0]!.diagram.elements.filter((e) => e.kind === 'PF');
-    expect(pfs.filter((e) => e.rot === 0).length).toBe(1 + p.hv.transformers.length + p.hv.capacitors.length);
-    expect(pfs.filter((e) => e.rot === 270).length).toBe(1);
+    // 主遮断装置の PF + 分岐ぶん + VT ヒューズ（VT の列に 1 台）
+    const dd = rs[0]!.diagram;
+    const vtx = dd.elements.find((e) => e.kind === 'VT')!.x;
+    const pfs = dd.elements.filter((e) => e.kind === 'PF');
+    expect(pfs.filter((e) => e.x !== vtx).length).toBe(1 + p.hv.transformers.length + p.hv.capacitors.length);
+    expect(pfs.filter((e) => e.x === vtx).length).toBe(1);
     // 幹線上（x = 主回路）では LBS が PF の上に来る
     const busY = rs[0]!.diagram.wires.find((w) => w.style === 'bus')!.points[0]!.y;
-    // 幹線に縦向きで並ぶ機器だけ見る（VT ヒューズは横向きで脇に付く）
-    const main = rs[0]!.diagram.elements.filter((e) => e.y < busY && e.rot === 0);
+    // 幹線（主回路の x）に並ぶ機器だけ見る
+    const mainX = dd.elements.find((e) => e.kind === 'DS')!.x;
+    const main = dd.elements.filter((e) => e.y < busY && e.x === mainX);
     const lbs = main.find((e) => e.kind === 'LBS')!;
     const pf = main.find((e) => e.kind === 'PF')!;
     expect(lbs.x).toBe(pf.x);
