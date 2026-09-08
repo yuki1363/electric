@@ -208,7 +208,7 @@ export function buildImportPlan(rows: ParsedRow[]): ImportPlan {
         };
       }
       const vt = gRows.find((r) => isDevice(r, 'VT'));
-      if (vt) plan.hvPatch.metering = { vt: true, a: true, v: true, w: true, wh: false, pf: false };
+      if (vt) plan.hvPatch.metering = { vt: true, a: true, v: true, w: true, wh: false, pf: false, as: true, vs: true };
       continue;
     }
 

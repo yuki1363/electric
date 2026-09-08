@@ -120,8 +120,14 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
     if (hv.la) out.push('la');
     if (hv.mainBreaker.ct) out.push('ct');
     if (hv.mainBreaker.ocr) out.push('ocr');
-    if (hv.metering.v) out.push('meterV');
-    if (hv.metering.a) out.push('meterA');
+    if (hv.metering.v) {
+      if (hv.metering.vs ?? true) out.push('vs');
+      out.push('meterV');
+    }
+    if (hv.metering.a) {
+      if (hv.metering.as ?? true) out.push('as');
+      out.push('meterA');
+    }
     if (hv.metering.w) out.push('meterW');
     if (hv.metering.pf) out.push('meterPf');
     if (hv.metering.wh) out.push('meterWh');
@@ -228,8 +234,21 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
               <CheckField checked={hv.metering.v} onChange={(v) => set({ metering: { ...hv.metering, v } })} label="V 電圧計" />{' '}
               <CheckField checked={hv.metering.a} onChange={(v) => set({ metering: { ...hv.metering, a: v } })} label="A 電流計" />{' '}
               <CheckField checked={hv.metering.w} onChange={(v) => set({ metering: { ...hv.metering, w: v } })} label="W 電力計" />{' '}
-              <CheckField checked={hv.metering.pf} onChange={(v) => set({ metering: { ...hv.metering, pf: v } })} label="PF 力率計" />{' '}
+              <CheckField checked={hv.metering.pf} onChange={(v) => set({ metering: { ...hv.metering, pf: v } })} label="cosφ 力率計" />{' '}
               <CheckField checked={hv.metering.wh} onChange={(v) => set({ metering: { ...hv.metering, wh: v } })} label="Wh 電力量計" />
+            </Row>
+            <Row label="計器切換開閉器">
+              <CheckField
+                checked={hv.metering.as ?? true}
+                onChange={(v) => set({ metering: { ...hv.metering, as: v } })}
+                label="AS（電流計切換）"
+              />{' '}
+              <CheckField
+                checked={hv.metering.vs ?? true}
+                onChange={(v) => set({ metering: { ...hv.metering, vs: v } })}
+                label="VS（電圧計切換）"
+              />
+              <span className="muted"> 計器の手前に直列に入ります</span>
             </Row>
             <Row label="接地">
               <CheckField checked={hv.grounding.aType} onChange={(v) => set({ grounding: { ...hv.grounding, aType: v } })} label="A種（筐体・LA）" />{' '}

@@ -72,10 +72,12 @@ export function nameplateRows(project: Project): NameplateRow[] {
     }
 
     const meters: [boolean, string, HvSlot][] = [
+      [hv.metering.v && (hv.metering.vs ?? true), 'VS', 'vs'],
       [hv.metering.v, 'V', 'meterV'],
+      [hv.metering.a && (hv.metering.as ?? true), 'AS', 'as'],
       [hv.metering.a, 'A', 'meterA'],
       [hv.metering.w, 'W', 'meterW'],
-      [hv.metering.pf, 'PF計', 'meterPf'],
+      [hv.metering.pf, 'cosφ', 'meterPf'],
       [hv.metering.wh, 'Wh', 'meterWh'],
     ];
     for (const [on, name, slot] of meters) if (on) out.push(row(name, np(slot), '', '高圧受電盤'));

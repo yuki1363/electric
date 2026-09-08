@@ -189,13 +189,37 @@ describe('高圧受電設備 単線結線図 生成', () => {
           (isPortEnd(w.from) && w.from.elementId === b.id && isPortEnd(w.to) && w.to.elementId === a.id),
       );
 
-    it('電流計は CT 二次側（OCR と直列）につながる', () => {
-      // CT → OCR → A → W → PF の直列。電圧計は電流回路に入らない
+    it('電流計は CT 二次側（OCR・AS と直列）につながる', () => {
+      // CT → OCR → AS → A → W → cosφ の直列。電圧計は電流回路に入らない
       expect(linked(el('CT'), el('OCR'))).toBe(true);
-      expect(linked(el('OCR'), el('METER_A'))).toBe(true);
+      expect(linked(el('OCR'), el('AS'))).toBe(true);
+      expect(linked(el('AS'), el('METER_A'))).toBe(true);
       expect(linked(el('METER_A'), el('METER_W'))).toBe(true);
       expect(linked(el('METER_W'), el('METER_PF'))).toBe(true);
       expect(linked(el('METER_V'), el('METER_PF'))).toBe(false);
+      expect(linked(el('METER_V'), el('METER_A'))).toBe(false);
+    });
+
+    it('電圧計は切換開閉器 (VS) を介して電圧回路につながる', () => {
+      expect(linked(el('VS'), el('METER_V'))).toBe(true);
+      // 電圧計そのものは電流回路にも電圧回路にも直接ぶら下がらない（VS 経由）
+      const v = el('METER_V');
+      const vbusY = el('VT').y + 15;
+      expect(d2.wires.some((w) => isPortEnd(w.from) && w.from.elementId === v.id && !isPortEnd(w.to) && w.to.y === vbusY)).toBe(false);
+      const vs = el('VS');
+      expect(d2.wires.some((w) => isPortEnd(w.from) && w.from.elementId === vs.id && !isPortEnd(w.to) && w.to.y === vbusY)).toBe(true);
+    });
+
+    it('切換開閉器は外せる', () => {
+      const noSw = generateHvSld({ ...p.hv, metering: { ...metering, as: false, vs: false } }, p.meta, p.panels)[0]!.diagram;
+      expect(noSw.elements.some((e) => e.kind === 'AS')).toBe(false);
+      expect(noSw.elements.some((e) => e.kind === 'VS')).toBe(false);
+      // 外すと電流計は OCR に直結、電圧計は電圧回路へ直接
+      const ocr = noSw.elements.find((e) => e.kind === 'OCR')!;
+      const a = noSw.elements.find((e) => e.kind === 'METER_A')!;
+      expect(
+        noSw.wires.some((w) => isPortEnd(w.from) && w.from.elementId === ocr.id && isPortEnd(w.to) && w.to.elementId === a.id),
+      ).toBe(true);
     });
 
     it('電圧計・電力計・力率計は VT 二次側の電圧回路につながる', () => {
@@ -208,10 +232,11 @@ describe('高圧受電設備 単線結線図 生成', () => {
         const m = el(k);
         return d2.wires.some((w) => isPortEnd(w.from) && w.from.elementId === m.id && !isPortEnd(w.to) && w.to.y === vbusY);
       };
-      expect(toBus('METER_V')).toBe(true);
+      expect(toBus('VS')).toBe(true); // 電圧計は VS 経由
       expect(toBus('METER_W')).toBe(true);
       expect(toBus('METER_PF')).toBe(true);
       expect(toBus('METER_A')).toBe(false);
+      expect(toBus('AS')).toBe(false);
     });
 
     it('電流回路の計器を増やしても母線の高さは変わらない', () => {

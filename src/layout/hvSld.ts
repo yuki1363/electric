@@ -4,6 +4,7 @@ import type { SymbolKind as SK } from '../symbols/types';
 import { DiagramBuilder } from './builder';
 import { bboxOfPrims, emptyBBox, inflate, isEmptyBBox, union } from '../geom/bbox';
 import { elementLabelPrims, elementPrims } from '../render/flatten';
+import { getSymbol } from '../symbols';
 import { GRID, TEXT, sheetGeom } from './constants';
 import { snapValue } from '../geom/point';
 import { dashedRect } from './dashRect';
@@ -16,8 +17,6 @@ const TP = 20;
 /** 分岐ピッチ（既定と、詰められる下限） */
 const BP_DEFAULT = 45;
 const BP_MIN = 35;
-/** 計器の横ピッチ */
-const MP = 20;
 
 type MeterKind = 'METER_V' | 'METER_A' | 'METER_W' | 'METER_PF' | 'METER_WH';
 
@@ -266,32 +265,61 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
      */
     const drawMetering = (ct: Element | null, ocr: boolean): void => {
       const mY = ct ? ct.y : tapY + 15;
+      /** 横一列に並べるときの隣どうしの隙間 */
+      const GAP = 10;
+      const halfOf = (k: SK) => getSymbol(k).bbox.w / 2;
+      let x = TX + 30;
+      let prevHalf = 0;
+      /** 直前の機器の右隣に置く x を返す */
+      const nextX = (k: SK) => {
+        const h = halfOf(k);
+        x = prevHalf === 0 ? x : x + prevHalf + GAP + h;
+        prevHalf = h;
+        return x;
+      };
+
       let last: { el: Element; port: string } | null = ct ? { el: ct, port: 'E' } : null;
       if (ct && ocr) {
-        const o = b.el('OCR', TX + 30, mY, { labels: [] });
+        const o = b.el('OCR', nextX('OCR'), mY, { labels: [] });
         b.wire(ct, 'E', o, 'W', 'control');
         last = { el: o, port: 'E' };
       }
       if (!tap || !hasMetering) return;
 
-      let x = TX + 55;
       /** 電圧回路につなぐ計器を左から順に */
       const voltEls: Element[] = [];
+      /** CT 二次の直列に機器を 1 台足す */
+      const chain = (kind: SK, slot?: HvSlot) => {
+        const el = b.el(kind, nextX(kind), mY, { labels: withModel([], slot ? hv.nameplates?.[slot] : undefined) });
+        if (last) b.wire(last.el, last.port, el, 'W', 'control');
+        last = { el, port: 'E' };
+        return el;
+      };
+
       currKinds.forEach((k) => {
-        const m = b.el(k, x, mY, { labels: withModel([], hv.nameplates?.[METER_SLOT[k]]) });
-        if (last) b.wire(last.el, last.port, m, 'W', 'control');
-        last = { el: m, port: 'E' };
+        // 電流計の手前に電流計切換開閉器を入れる
+        if (k === 'METER_A' && (hv.metering.as ?? true)) chain('AS', 'as');
+        const m = chain(k, METER_SLOT[k]);
         if (METER_CIRCUIT[k].v) voltEls.push(m);
-        x += MP;
       });
       if (currKinds.length > 0) b.text(TX + 52, mY + 7, 'CT二次', TEXT.rating, 'end');
+
+      // 電圧計は VT 二次だけを使う。切換開閉器を挟んで電圧回路につなぐ
+      const voltTaps: Element[] = [...voltEls];
       voltOnlyKinds.forEach((k) => {
-        voltEls.push(b.el(k, x, mY, { labels: withModel([], hv.nameplates?.[METER_SLOT[k]]) }));
-        x += MP;
+        const useVs = k === 'METER_V' && (hv.metering.vs ?? true);
+        const vs = useVs ? b.el('VS', nextX('VS'), mY, { labels: withModel([], hv.nameplates?.vs) }) : null;
+        const m = b.el(k, nextX(k), mY, { labels: withModel([], hv.nameplates?.[METER_SLOT[k]]) });
+        if (vs) {
+          b.wire(vs, 'E', m, 'W', 'control');
+          voltTaps.push(vs);
+        } else {
+          voltTaps.push(m);
+        }
       });
 
       // 計器用変圧器と電圧回路。VT の一次側には限流ヒューズを入れる
-      const vx = x + 10;
+      const vx = x + prevHalf + 20;
       const vbusY = mY + 15;
       const vt = hv.metering.vt ? b.el('VT', vx, mY, { labels: withModel(['VT'], hv.nameplates?.vt) }) : null;
       if (vt) {
@@ -303,12 +331,12 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
         b.wire(tap, 'E', vtf, 'N');
         b.wire(vtf, 'S', vt, 'N');
       }
-      if (voltEls.length > 0) {
+      if (voltTaps.length > 0) {
         if (vt) b.wireToPoint(vt, 'S', { x: vx, y: vbusY }, 'control');
         else b.wireToPoint(tap, 'E', { x: vx, y: vbusY }, 'control');
-        const left = voltEls[0]!.x;
+        const left = Math.min(...voltTaps.map((e) => e.x));
         b.wirePoints({ x: vx, y: vbusY }, { x: left, y: vbusY }, 'control');
-        voltEls.forEach((m) => {
+        voltTaps.forEach((m) => {
           b.wireToPoint(m, 'S', { x: m.x, y: vbusY }, 'control');
           if (m.x !== left) b.el('JUNCTION', m.x, vbusY);
         });

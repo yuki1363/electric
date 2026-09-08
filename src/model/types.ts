@@ -71,7 +71,9 @@ export type HvSlot =
   | 'meterV'
   | 'meterW'
   | 'meterPf'
-  | 'meterWh';
+  | 'meterWh'
+  | 'as'
+  | 'vs';
 
 export const HV_SLOT_LABEL: Record<HvSlot, string> = {
   pas: '区分開閉器 (PAS/UGS)',
@@ -97,6 +99,8 @@ export const HV_SLOT_LABEL: Record<HvSlot, string> = {
   meterW: '電力計 (W)',
   meterPf: '力率計 (PF)',
   meterWh: '電力量計 (Wh)',
+  as: '電流計切換開閉器 (AS)',
+  vs: '電圧計切換開閉器 (VS)',
 };
 
 /** 図面上の機器に紐付かない銘板（制御補機など）。銘板表にのみ出す */
@@ -210,7 +214,18 @@ export interface HvSpec {
   ds: boolean;
   mainBreaker: HvMainBreaker;
   la: boolean;
-  metering: { vt: boolean; a: boolean; v: boolean; w: boolean; wh: boolean; pf: boolean };
+  metering: {
+    vt: boolean;
+    a: boolean;
+    v: boolean;
+    w: boolean;
+    wh: boolean;
+    pf: boolean;
+    /** 電流計切換開閉器（未指定なら付ける） */
+    as?: boolean;
+    /** 電圧計切換開閉器（未指定なら付ける） */
+    vs?: boolean;
+  };
   feeders: HvFeederSpec[];
   transformers: TransformerSpec[];
   capacitors: CapacitorSpec[];

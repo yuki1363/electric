@@ -84,6 +84,8 @@ export type SymbolKind =
   | 'METER_W'
   | 'METER_WH'
   | 'METER_PF'
+  | 'AS'
+  | 'VS'
   // その他
   | 'GROUND_A'
   | 'GROUND_B'
