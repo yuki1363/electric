@@ -27,11 +27,11 @@ describe('低圧 → 低圧の変圧器（数珠つなぎ）', () => {
   const body = (name: string) => d.elements.find((e) => e.labels.includes(name))!;
 
   it('高圧単線結線図の中に、上から順に描く', () => {
-    const [a, b2, c] = ['Tr-1', 'Tr-2', 'Tr-3'].map(body);
-    expect(a.y).toBeLessThan(b2!.y);
-    expect(b2!.y).toBeLessThan(c!.y);
+    const ys = ['Tr-1', 'Tr-2', 'Tr-3'].map((n) => body(n).y);
+    expect(ys[0]!).toBeLessThan(ys[1]!);
+    expect(ys[1]!).toBeLessThan(ys[2]!);
     // 同じ列に並ぶ
-    expect(new Set([a!.x, b2!.x, c!.x]).size).toBe(1);
+    expect(new Set(['Tr-1', 'Tr-2', 'Tr-3'].map((n) => body(n).x)).size).toBe(1);
   });
 
   it('一次電圧はそれぞれの入力どおりに出る', () => {
