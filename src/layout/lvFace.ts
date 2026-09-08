@@ -97,8 +97,6 @@ export function generateLvFace(panel: LvPanelSpec, meta: ProjectMeta): GenResult
   }
   b.text(x1, y2 + 5, `盤外形 約 ${Math.round(x2 - x1)} × ${Math.round(y2 - top)} mm（参考）`, TEXT.small, 'start');
 
-  if (x2 > g.drawable.x2) b.warn('盤面配置図が用紙幅を超えています');
-  if (y2 > g.drawable.y2) b.warn('盤面配置図が用紙高さを超えています');
   if (panel.circuits.length === 0) b.warn('分岐回路がありません');
 
   return { diagram: b.build(), warnings: b.warnings };

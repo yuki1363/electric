@@ -6,6 +6,8 @@ export interface Placement {
   x: number;
   y: number;
   rot: Rot;
+  /** 図記号の拡大率（既定 1）。用紙に収めるための自動縮尺に使う */
+  scale?: number;
 }
 
 /** y 下向き空間での回転（正 = 時計回り） */
@@ -23,7 +25,8 @@ export function rotatePoint(p: Point, rot: Rot): Point {
 }
 
 export function toWorld(p: Point, pl: Placement): Point {
-  const r = rotatePoint(p, pl.rot);
+  const k = pl.scale ?? 1;
+  const r = rotatePoint({ x: p.x * k, y: p.y * k }, pl.rot);
   return { x: r.x + pl.x, y: r.y + pl.y };
 }
 
@@ -53,6 +56,7 @@ export function portToWorld(port: PortDef, pl: Placement): PortDef {
 }
 
 export function transformPrim(prim: Prim, pl: Placement): Prim {
+  const k = pl.scale ?? 1;
   switch (prim.t) {
     case 'line': {
       const a = toWorld({ x: prim.x1, y: prim.y1 }, pl);
@@ -61,18 +65,18 @@ export function transformPrim(prim: Prim, pl: Placement): Prim {
     }
     case 'circle': {
       const c = toWorld({ x: prim.cx, y: prim.cy }, pl);
-      return { ...prim, cx: c.x, cy: c.y };
+      return { ...prim, cx: c.x, cy: c.y, r: prim.r * k };
     }
     case 'arc': {
       const c = toWorld({ x: prim.cx, y: prim.cy }, pl);
-      return { ...prim, cx: c.x, cy: c.y, start: prim.start + pl.rot, end: prim.end + pl.rot };
+      return { ...prim, cx: c.x, cy: c.y, r: prim.r * k, start: prim.start + pl.rot, end: prim.end + pl.rot };
     }
     case 'polyline':
       return { ...prim, pts: prim.pts.map((p) => toWorld(p, pl)) };
     case 'text': {
       const p = toWorld({ x: prim.x, y: prim.y }, pl);
       const rot = ((prim.rot ?? 0) + pl.rot) % 360;
-      return { ...prim, x: p.x, y: p.y, ...(rot ? { rot } : {}) };
+      return { ...prim, x: p.x, y: p.y, h: prim.h * k, ...(rot ? { rot } : {}) };
     }
   }
 }

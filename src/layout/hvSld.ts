@@ -2,7 +2,6 @@ import type { Element, HvSpec, LvPanelSpec, ProjectMeta } from '../model/types';
 import type { SymbolKind, SymbolKind as SK } from '../symbols/types';
 import { DiagramBuilder } from './builder';
 import { GRID, TEXT, sheetGeom } from './constants';
-import { getSymbol } from '../symbols';
 import { snapValue } from '../geom/point';
 import type { GenResult } from './types';
 
@@ -142,7 +141,6 @@ export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec
   const bx0 = TX + 20;
   const endX = (pitch: number) => (n > 0 ? bx0 + (n - 1) * pitch + 15 : TX + 30);
   if (endX(bp) > g.drawable.x2) bp = BP_MIN;
-  if (endX(bp) > g.drawable.x2) b.warn('分岐数が多く、母線が用紙幅を超えます');
   if (n === 0) b.warn('変圧器・コンデンサが登録されていません');
 
   b.wirePoints({ x: TX, y: busY }, { x: endX(bp), y: busY }, 'bus');
@@ -204,17 +202,14 @@ export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec
     }
   });
 
-  // 筐体接地
+  // 筐体接地（作図内容の下端に合わせて置く）
   if (hv.grounding.aType) {
-    const gx = snapValue(g.drawable.x1 + 20, GRID);
-    const gy = snapValue(g.drawable.y2 - 10, GRID);
+    const bottom = Math.max(...b.elements.map((e) => e.y), busY);
+    const gx = snapValue(g.drawable.x1 + 10, GRID);
+    const gy = snapValue(bottom, GRID);
     const gnd = b.el('GROUND_A', gx, gy, { labels: ['A種接地（筐体）'] });
     b.wireFromPoint({ x: gx, y: gy - 15 }, gnd, 'N');
   }
-
-  // 用紙チェック
-  const maxY = Math.max(...b.elements.map((e) => e.y + getSymbol(e.kind).bbox.h / 2), 0);
-  if (maxY > g.drawable.y2) b.warn(`図面の高さが用紙を超えています（${Math.round(maxY)}mm）。A3 を推奨します`);
 
   return { diagram: b.build(), warnings: b.warnings };
 }

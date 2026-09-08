@@ -18,6 +18,7 @@ export function defaultHv(): HvSpec {
     mainBreaker: { type: 'CB', vcb: { ratedA: 600, breakingKA: 12.5 }, ocr: true, ctRatio: '75/5A' },
     la: true,
     metering: { vt: true, a: true, v: true, w: true, wh: false, pf: false },
+    feeders: [],
     transformers: [],
     capacitors: [],
     grounding: { aType: true, bType: true },

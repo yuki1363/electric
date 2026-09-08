@@ -71,11 +71,19 @@ export function parse(text: string): Project {
 
   // 欠けたフィールドは既定値で補完
   const meta = { ...defaultMeta(), ...raw.meta } as Project['meta'];
-  const hv = { ...defaultHv(), ...raw.hv } as Project['hv'];
+  const rawHv = raw.hv as Record<string, unknown>;
+  const hv = {
+    ...defaultHv(),
+    ...rawHv,
+    feeders: Array.isArray(rawHv.feeders) ? rawHv.feeders : [],
+  } as Project['hv'];
   const panels = raw.panels.map((p, i) => {
     if (!isObj(p) || typeof p.id !== 'string') throw new ParseError(`panels[${i}] が不正です`);
     const base = defaultPanel(p.id, typeof p.name === 'string' ? p.name : `L-${i + 1}`);
     return { ...base, ...p, circuits: Array.isArray(p.circuits) ? p.circuits : [] } as Project['panels'][number];
   });
-  return { version: 1, meta, hv, panels, diagrams };
+  const extraNameplates = Array.isArray(raw.extraNameplates)
+    ? (raw.extraNameplates as Project['extraNameplates'])
+    : undefined;
+  return { version: 1, meta, hv, panels, ...(extraNameplates ? { extraNameplates } : {}), diagrams };
 }

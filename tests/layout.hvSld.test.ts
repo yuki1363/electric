@@ -7,6 +7,7 @@ import { isPortEnd } from '../src/model/types';
 import { getSymbol } from '../src/symbols';
 import { bboxOfRect, overlaps } from '../src/geom/bbox';
 import { elementPort } from '../src/layout/builder';
+import { contentBBox, fitDiagram } from '../src/layout/fit';
 
 describe('高圧受電設備 単線結線図 生成', () => {
   const p = sampleProject();
@@ -108,10 +109,18 @@ describe('高圧受電設備 単線結線図 生成', () => {
     expect(kinds.filter((k) => k === 'PF').length).toBe(1 + p.hv.transformers.length + p.hv.capacitors.length);
   });
 
-  it('A4 では高さ超過の警告が出る', () => {
+  it('A4 では自動縮尺で用紙に収まる', () => {
     const meta = { ...p.meta, sheet: { ...p.meta.sheet, size: 'A4' as const } };
     const r = generateHvSld(p.hv, meta, p.panels);
-    expect(r.warnings.some((w) => w.includes('用紙'))).toBe(true);
+    const fit = fitDiagram(r.diagram);
+    expect(fit.scale).toBeLessThan(1);
+    expect(fit.overflow).toBe(false);
+    const g = sheetGeom(fit.diagram.sheet);
+    const b = contentBBox(fit.diagram);
+    expect(b.minX).toBeGreaterThanOrEqual(g.drawable.x1 - 0.01);
+    expect(b.maxX).toBeLessThanOrEqual(g.drawable.x2 + 0.01);
+    expect(b.minY).toBeGreaterThanOrEqual(g.drawable.y1 - 0.01);
+    expect(b.maxY).toBeLessThanOrEqual(g.drawable.y2 + 0.01);
   });
 
   it('決定的に生成される', () => {

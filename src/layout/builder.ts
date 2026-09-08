@@ -20,14 +20,14 @@ export function elementPort(el: Element, portId: string): RouteEnd {
   const def = getSymbol(el.kind);
   const port = def.ports.find((p) => p.id === portId);
   if (!port) throw new Error(`${el.kind} にポート ${portId} はありません`);
-  const w = portToWorld(port, { x: el.x, y: el.y, rot: el.rot });
+  const w = portToWorld(port, { x: el.x, y: el.y, rot: el.rot, scale: el.scale ?? 1 });
   return { p: { x: w.x, y: w.y }, dir: w.dir };
 }
 
 export function elementPorts(el: Element): { id: string; p: Point; dir: RouteEnd['dir'] }[] {
   const def = getSymbol(el.kind);
   return def.ports.map((port) => {
-    const w = portToWorld(port, { x: el.x, y: el.y, rot: el.rot });
+    const w = portToWorld(port, { x: el.x, y: el.y, rot: el.rot, scale: el.scale ?? 1 });
     return { id: port.id, p: { x: w.x, y: w.y }, dir: w.dir };
   });
 }

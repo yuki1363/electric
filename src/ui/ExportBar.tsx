@@ -16,7 +16,7 @@ export function ExportBar({ project }: { project: Project }) {
 
   const targets = project.diagrams.filter((d) => selected.has(d.id));
   const title = (d: Project['diagrams'][number]) =>
-    withFrame ? titleInfoFromMeta(project.meta, d.title, d.page, d.pageCount) : undefined;
+    withFrame ? titleInfoFromMeta(project.meta, d.title, d.page, d.pageCount, d.scale) : undefined;
 
   /**
    * CAD や OS で扱いやすいよう、ファイル名は ASCII のみで組み立てる。

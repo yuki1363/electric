@@ -23,6 +23,67 @@ export interface ProjectMeta {
   author: string;
   company?: string;
   sheet: SheetSpec;
+  /** 図面上の機器ラベルに型式を併記する */
+  showModels?: boolean;
+}
+
+// ---------------------------------------------------------------- 銘板
+
+/** 機器銘板の記載事項。作図には使わず、銘板表と（任意で）図面ラベルに出す */
+export interface Nameplate {
+  /** 型式 */
+  model?: string;
+  /** 定格容量（原文のまま保持する） */
+  ratingText?: string;
+  /** 製造者 */
+  maker?: string;
+  /** 製造年月 */
+  madeOn?: string;
+  /** 製造番号 */
+  serial?: string;
+  /** 使用箇所 */
+  location?: string;
+  /** 備考 */
+  note?: string;
+}
+
+/** 受電盤内の機器スロット（真偽値で持っている機器に銘板を紐付けるためのキー） */
+export type HvSlot =
+  | 'pas'
+  | 'dgr'
+  | 'cable'
+  | 'vct'
+  | 'ds'
+  | 'vt'
+  | 'la'
+  | 'vcb'
+  | 'ct'
+  | 'ocr'
+  | 'lbs'
+  | 'pf';
+
+export const HV_SLOT_LABEL: Record<HvSlot, string> = {
+  pas: '区分開閉器 (PAS/UGS)',
+  dgr: '地絡方向継電器 (DGR)',
+  cable: '引込ケーブル',
+  vct: '計器用変成器 (VCT)',
+  ds: '断路器 (DS)',
+  vt: '計器用変圧器 (VT)',
+  la: '避雷器 (LA)',
+  vcb: '真空遮断器 (VCB)',
+  ct: '変流器 (CT)',
+  ocr: '過電流継電器 (OCR)',
+  lbs: '負荷開閉器 (LBS)',
+  pf: '限流ヒューズ (PF)',
+};
+
+/** 図面上の機器に紐付かない銘板（制御補機など）。銘板表にのみ出す */
+export interface NameplateEntry extends Nameplate {
+  id: Id;
+  /** 機器名称 */
+  deviceName: string;
+  /** 所属盤・系統 */
+  group?: string;
 }
 
 // ---------------------------------------------------------------- 高圧受電設備
@@ -43,6 +104,9 @@ export interface TransformerSpec {
   pfA: number;
   /** 給電先分電盤 id */
   feeds?: Id;
+  /** 所属する高圧分岐盤 id。未指定なら高圧母線に直結 */
+  feederId?: Id;
+  nameplate?: Nameplate;
 }
 
 export interface CapacitorSpec {
@@ -53,6 +117,31 @@ export interface CapacitorSpec {
   sr: boolean;
   switch: HvSwitch;
   pfA: number;
+  /** 所属する高圧分岐盤 id。未指定なら高圧母線に直結 */
+  feederId?: Id;
+  nameplate?: Nameplate;
+}
+
+/** 高圧分岐盤（母線から分岐する VCB / LBS 付きのフィーダー） */
+export interface HvFeederSpec {
+  id: Id;
+  /** 例: 高圧分岐盤No.1 F1 */
+  name: string;
+  breaker: 'VCB' | 'LBS';
+  ratedA: number;
+  /** VCB の遮断容量 kA */
+  breakingKA?: number;
+  /** LBS の限流ヒューズ定格 A */
+  pfA?: number;
+  ct: boolean;
+  /** 例: 100/5A */
+  ctRatio?: string;
+  ocr: boolean;
+  cable?: { type: string; sq: number; lengthM?: number };
+  /** 負荷名（配下に機器を置かない場合の行き先表示） */
+  loadName?: string;
+  /** vcb / lbs / ct / ocr / cable ごとの銘板 */
+  nameplates?: Record<string, Nameplate>;
 }
 
 export type HvMainBreaker =
@@ -71,8 +160,11 @@ export interface HvSpec {
   mainBreaker: HvMainBreaker;
   la: boolean;
   metering: { vt: boolean; a: boolean; v: boolean; w: boolean; wh: boolean; pf: boolean };
+  feeders: HvFeederSpec[];
   transformers: TransformerSpec[];
   capacitors: CapacitorSpec[];
+  /** 受電盤内の機器銘板 */
+  nameplates?: Partial<Record<HvSlot, Nameplate>>;
   grounding: { aType: boolean; bType: boolean };
 }
 
@@ -105,11 +197,12 @@ export interface LvPanelSpec {
   main: { kind: BreakerKind; af: number; at: number; poles: '2P' | '3P'; sensitivityMa?: number };
   circuits: CircuitSpec[];
   face: { rows: 1 | 2; order: 'oddTopEvenBottom' | 'sequential' };
+  nameplate?: Nameplate;
 }
 
 // ---------------------------------------------------------------- 図面
 
-export type DiagramKind = 'hv-sld' | 'lv-sld' | 'lv-face' | 'lv-schedule';
+export type DiagramKind = 'hv-sld' | 'lv-sld' | 'lv-face' | 'lv-schedule' | 'nameplate';
 
 export interface Element {
   id: Id;
@@ -118,6 +211,8 @@ export interface Element {
   x: number;
   y: number;
   rot: Rot;
+  /** 図記号の拡大率（既定 1）。用紙に収めるための自動縮尺で設定される */
+  scale?: number;
   /** labelAnchor（+labelOffset）に積む行 */
   labels: string[];
   labelOffset?: Point;
@@ -158,6 +253,8 @@ export interface Diagram {
   /** 複数ページのときのページ番号 (1 始まり) */
   page?: number;
   pageCount?: number;
+  /** 用紙に収めるために適用された縮尺（1 = 等倍） */
+  scale?: number;
   elements: Element[];
   wires: Wire[];
   texts: TextItem[];
@@ -174,6 +271,8 @@ export interface Project {
   meta: ProjectMeta;
   hv: HvSpec;
   panels: LvPanelSpec[];
+  /** 図面に描かない機器の銘板（制御補機など）。銘板表にのみ出す */
+  extraNameplates?: NameplateEntry[];
   diagrams: Diagram[];
 }
 

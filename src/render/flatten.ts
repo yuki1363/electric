@@ -25,8 +25,9 @@ export interface LabelLine {
 export function elementLabelLines(el: Element): LabelLine[] {
   if (el.labels.length === 0) return [];
   const def = getSymbol(el.kind);
+  const k = el.scale ?? 1;
   const lines = el.labels;
-  const hs = lines.map((_, i) => (i === 0 ? TEXT.name : TEXT.rating));
+  const hs = lines.map((_, i) => (i === 0 ? TEXT.name : TEXT.rating) * k);
   const ox = el.labelOffset?.x ?? 0;
   const oy = el.labelOffset?.y ?? 0;
 
@@ -40,13 +41,13 @@ export function elementLabelLines(el: Element): LabelLine[] {
   const total = acc;
 
   if (el.rot === 90 || el.rot === 270) {
-    const y0 = el.y - def.bbox.w / 2 - 3 - total - hs[hs.length - 1]! / 2;
+    const y0 = el.y - (def.bbox.w / 2) * k - 3 * k - total - hs[hs.length - 1]! / 2;
     return lines.map((text, i) => ({ x: el.x + ox, y: y0 + offs[i]! + oy, text, h: hs[i]!, anchor: 'middle' as const }));
   }
   const la = def.labelAnchor;
-  const y0 = el.y + la.dy - total / 2;
+  const y0 = el.y + la.dy * k - total / 2;
   return lines.map((text, i) => ({
-    x: el.x + la.dx + ox,
+    x: el.x + la.dx * k + ox,
     y: y0 + offs[i]! + oy,
     text,
     h: hs[i]!,
@@ -68,7 +69,7 @@ export function elementLabelPrims(el: Element): Prim[] {
 
 export function elementPrims(el: Element): Prim[] {
   const def = getSymbol(el.kind);
-  return transformPrims(def.prims, { x: el.x, y: el.y, rot: el.rot });
+  return transformPrims(def.prims, { x: el.x, y: el.y, rot: el.rot, scale: el.scale ?? 1 });
 }
 
 export function textItemPrim(t: TextItem): Prim {

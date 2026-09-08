@@ -174,7 +174,7 @@ export function Shell({ state }: { state: AppState }) {
             <Canvas
               key={active.id}
               diagram={active}
-              title={titleInfoFromMeta(project.meta, active.title, active.page, active.pageCount)}
+              title={titleInfoFromMeta(project.meta, active.title, active.page, active.pageCount, active.scale)}
               selection={selection}
               onSelectionChange={setSelection}
               tool={tool}

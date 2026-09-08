@@ -7,9 +7,10 @@ import { estimateTextWidth } from '../../layout/textWidth';
 
 export function elementBBox(el: Element): BBox {
   const def = getSymbol(el.kind);
+  const k = el.scale ?? 1;
   const swap = el.rot === 90 || el.rot === 270;
-  const w = Math.max(swap ? def.bbox.h : def.bbox.w, 4);
-  const h = Math.max(swap ? def.bbox.w : def.bbox.h, 4);
+  const w = Math.max((swap ? def.bbox.h : def.bbox.w) * k, 4 * k);
+  const h = Math.max((swap ? def.bbox.w : def.bbox.h) * k, 4 * k);
   return bboxOfRect(el.x, el.y, w, h);
 }
 

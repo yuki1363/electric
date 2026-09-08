@@ -2,6 +2,7 @@ import type { Prim } from '../symbols/types';
 import type { ProjectMeta, SheetSpec } from '../model/types';
 import { L, RECT, T } from '../symbols/helpers';
 import { TEXT, sheetGeom } from './constants';
+import { scaleLabel } from './fit';
 
 export interface TitleInfo {
   title: string;
@@ -11,6 +12,8 @@ export interface TitleInfo {
   company?: string;
   page?: number;
   pageCount?: number;
+  /** 図面に適用された縮尺（1 = 等倍） */
+  scale?: number;
 }
 
 /** 図枠 + 表題欄（ワールド座標のプリミティブ） */
@@ -41,13 +44,19 @@ export function sheetFramePrims(sheet: SheetSpec, info: TitleInfo): Prim[] {
   cell(colX, 0, '図番', info.drawingNo);
   cell(tb.x1, 1, '会社', info.company ?? '');
   cell(colX, 1, '日付', info.date);
-  cell(tb.x1, 2, '用紙', `${sheet.size} 横  縮尺 1:1`);
+  cell(tb.x1, 2, '用紙', `${sheet.size} 横  縮尺 ${scaleLabel(info.scale)}`);
   cell(colX, 2, '作成', info.author);
 
   return prims;
 }
 
-export function titleInfoFromMeta(meta: ProjectMeta, title: string, page?: number, pageCount?: number): TitleInfo {
+export function titleInfoFromMeta(
+  meta: ProjectMeta,
+  title: string,
+  page?: number,
+  pageCount?: number,
+  scale?: number,
+): TitleInfo {
   return {
     title,
     drawingNo: meta.drawingNo,
@@ -56,5 +65,6 @@ export function titleInfoFromMeta(meta: ProjectMeta, title: string, page?: numbe
     ...(meta.company ? { company: meta.company } : {}),
     ...(page ? { page } : {}),
     ...(pageCount ? { pageCount } : {}),
+    ...(scale !== undefined ? { scale } : {}),
   };
 }

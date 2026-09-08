@@ -3,7 +3,24 @@ import { generateHvSld } from './hvSld';
 import { generateLvSld } from './lvSld';
 import { generateLvFace } from './lvFace';
 import { generateLvSchedule } from './lvSchedule';
+import { fitDiagram, isTight, scaleLabel } from './fit';
 import type { GenResult } from './types';
+
+/** 生成結果を用紙に収める。縮小したときは警告で知らせる */
+function fitResult(r: GenResult): GenResult {
+  const { diagram, scale, overflow } = fitDiagram(r.diagram);
+  const warnings = [...r.warnings];
+  if (overflow) {
+    warnings.push(`内容が多く、縮尺 ${scaleLabel(scale)} でも用紙に収まりません。用紙を A3 にするか機器を分けてください`);
+  } else if (scale < 1) {
+    warnings.push(
+      isTight(scale)
+        ? `用紙に収めるため縮尺 ${scaleLabel(scale)} まで縮小しました。図記号が小さいため A3 横を推奨します`
+        : `用紙に収めるため縮尺 ${scaleLabel(scale)} で作図しました`,
+    );
+  }
+  return { diagram, warnings };
+}
 
 export interface RegenerateResult {
   diagrams: Diagram[];
@@ -12,15 +29,16 @@ export interface RegenerateResult {
 
 /** 仕様から全図面を生成する */
 export function regenerateAll(project: Project): RegenerateResult {
-  const results: GenResult[] = [];
+  const raw: GenResult[] = [];
   if (project.hv.enabled) {
-    results.push(generateHvSld(project.hv, project.meta, project.panels));
+    raw.push(generateHvSld(project.hv, project.meta, project.panels));
   }
   for (const panel of project.panels) {
-    results.push(...generateLvSld(panel, project.meta, project.hv.transformers));
-    results.push(generateLvFace(panel, project.meta));
-    results.push(...generateLvSchedule(panel, project.meta, project.hv.transformers));
+    raw.push(...generateLvSld(panel, project.meta, project.hv.transformers));
+    raw.push(generateLvFace(panel, project.meta));
+    raw.push(...generateLvSchedule(panel, project.meta, project.hv.transformers));
   }
+  const results = raw.map(fitResult);
   return {
     diagrams: results.map((r) => r.diagram),
     warnings: results.flatMap((r) => r.warnings.map((w) => `[${r.diagram.title}] ${w}`)),
