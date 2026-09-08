@@ -3,6 +3,7 @@ import type { Element, HvSpec, LvPanelSpec, Project, ProjectMeta, TextItem, Wire
 
 export type Action =
   | { type: 'LOAD_PROJECT'; project: Project }
+  | { type: 'IMPORT_NAMEPLATES'; project: Project }
   | { type: 'SET_META'; meta: Partial<ProjectMeta> }
   | { type: 'SET_HV'; hv: HvSpec }
   | { type: 'UPDATE_PANEL'; panel: LvPanelSpec }

@@ -95,7 +95,6 @@ export function nameplateRows(project: Project): NameplateRow[] {
     }
     for (const c of hv.capacitors) {
       out.push(row('SC', c.nameplate, `${c.kvar}kvar 6600V`, c.name));
-      if (c.sr) out.push(row('SR', undefined, 'L=6%', c.name));
     }
   }
 

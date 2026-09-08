@@ -89,7 +89,8 @@ export interface NameplateEntry extends Nameplate {
 // ---------------------------------------------------------------- 高圧受電設備
 
 export type TrPhase = '1φ' | '3φ';
-export type TrSecondary = '105-210V' | '210V' | '105V' | '420V';
+/** 二次電圧の表記。よく使う値は候補として出すが、440V など任意の値も入れられる */
+export type TrSecondary = string;
 export type HvSwitch = 'LBS' | 'PC';
 
 export interface TransformerSpec {

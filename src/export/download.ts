@@ -19,6 +19,15 @@ export function readFileAsText(file: File): Promise<string> {
   });
 }
 
+export function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as ArrayBuffer);
+    r.onerror = () => reject(r.error);
+    r.readAsArrayBuffer(file);
+  });
+}
+
 /** ファイル選択ダイアログを開く */
 export function pickFile(accept: string): Promise<File | null> {
   return new Promise((resolve) => {

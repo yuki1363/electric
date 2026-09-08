@@ -5,12 +5,8 @@ import { newId } from '../../model/ids';
 import { useDispatch } from '../../state/context';
 import { CheckField, NumberField, Row, Section, SelectField, TextField } from '../fields';
 
-const SECONDARY = [
-  { value: '105-210V', label: '105-210V（単相3線）' },
-  { value: '210V', label: '210V（三相）' },
-  { value: '105V', label: '105V' },
-  { value: '420V', label: '420V' },
-] as const;
+/** 二次電圧の入力候補（任意の値も入力できる） */
+const SECONDARY_OPTIONS = ['105-210V', '210V', '105V', '420V', '440V', '400V', '210/105V'];
 
 export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
   const dispatch = useDispatch();
@@ -85,6 +81,11 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
 
   return (
     <div>
+      <datalist id="secondary-options">
+        {SECONDARY_OPTIONS.map((v) => (
+          <option key={v} value={v} />
+        ))}
+      </datalist>
       <Section title="高圧受電設備">
         <Row label="高圧受電図を作成">
           <CheckField checked={hv.enabled} onChange={(v) => set({ enabled: v })} label="有効（6.6kV 受電）" />
@@ -257,7 +258,9 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                       <SelectField value={t.phase} options={[{ value: '1φ', label: '単相' }, { value: '3φ', label: '三相' }]} onChange={(v) => setTr(t.id, { phase: v })} />
                     </td>
                     <td><NumberField value={t.kva} onCommit={(v) => setTr(t.id, { kva: v ?? 100 })} /></td>
-                    <td><SelectField value={t.secondary} options={SECONDARY} onChange={(v) => setTr(t.id, { secondary: v })} /></td>
+                    <td>
+                      <TextField value={t.secondary} width={90} list="secondary-options" onCommit={(v) => setTr(t.id, { secondary: v })} />
+                    </td>
                     <td><SelectField value={t.switch} options={[{ value: 'LBS', label: 'LBS+PF' }, { value: 'PC', label: 'PC' }]} onChange={(v) => setTr(t.id, { switch: v })} /></td>
                     <td><NumberField value={t.pfA} onCommit={(v) => setTr(t.id, { pfA: v ?? 30 })} width={60} /></td>
                     <td>

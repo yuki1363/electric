@@ -4,6 +4,7 @@ import type { Project } from '../model/types';
 import type { Tool } from './canvas/types';
 import { Palette } from './panels/Palette';
 import { ExportBar } from './ExportBar';
+import { ImportDialog } from './ImportDialog';
 import { PropertiesPanel } from './panels/PropertiesPanel';
 import type { AppState } from '../state/reducer';
 import { canRedo, canUndo } from '../state/history';
@@ -28,6 +29,7 @@ export function Shell({ state }: { state: AppState }) {
   const [specNav, setSpecNav] = useState<string>('meta');
   const [activeDiagramId, setActiveDiagramId] = useState<string>(project.diagrams[0]?.id ?? '');
   const [message, setMessage] = useState<string>('');
+  const [importing, setImporting] = useState(false);
   const [selection, setSelection] = useState<string[]>([]);
   const [tool, setTool] = useState<Tool>('select');
   const viewCenter = useRef<Point>({ x: 210, y: 148 });
@@ -104,6 +106,9 @@ export function Shell({ state }: { state: AppState }) {
           <button onClick={() => onNew('sample')}>サンプル</button>
           <button onClick={onOpen}>開く</button>
           <button onClick={onSave}>保存 (JSON)</button>
+          <button onClick={() => setImporting(true)} title="機器銘板表の Excel / CSV から設備を取り込む">
+            Excel 取り込み
+          </button>
           <span className="sep" />
           <button disabled={!canUndo(state.history)} onClick={() => dispatch({ type: 'UNDO' })} title="Ctrl+Z">
             元に戻す
@@ -123,6 +128,8 @@ export function Shell({ state }: { state: AppState }) {
         {message && <div className="message">{message}</div>}
         {state.warnings.length > 0 && <div className="warnings" title={state.warnings.join('\n')}>{state.warnings[0]}{state.warnings.length > 1 ? ` 他${state.warnings.length - 1}件` : ''}</div>}
       </header>
+
+      {importing && <ImportDialog project={project} onClose={() => setImporting(false)} />}
 
       {tab === 'spec' && (
         <main className="app-main spec">

@@ -43,6 +43,11 @@ export function reducer(state: AppState, action: Action): AppState {
       const r = regenerateProject(action.project, true);
       return { history: createHistory(r.project), previewBase: null, warnings: r.warnings };
     }
+    case 'IMPORT_NAMEPLATES': {
+      // 取り込みは 1 手として履歴に積む（Undo 1 回で元に戻せる）
+      const r = regenerateProject(markStale(action.project), false);
+      return commit(r.project, r.warnings);
+    }
     case 'SET_META':
       return commit(markStale({ ...p, meta: { ...p.meta, ...action.meta } }));
     case 'SET_HV':

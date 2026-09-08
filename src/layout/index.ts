@@ -32,9 +32,11 @@ export interface RegenerateResult {
 export function regenerateAll(project: Project): RegenerateResult {
   const raw: GenResult[] = [];
   if (project.hv.enabled) {
-    raw.push(generateHvSld(project.hv, project.meta, project.panels));
+    raw.push(...generateHvSld(project.hv, project.meta, project.panels));
   }
   for (const panel of project.panels) {
+    // 分岐回路が未入力の盤は図面を作らない（変圧器の給電先としてだけ存在する状態）
+    if (panel.circuits.length === 0) continue;
     raw.push(...generateLvSld(panel, project.meta, project.hv.transformers));
     raw.push(generateLvFace(panel, project.meta));
     raw.push(...generateLvSchedule(panel, project.meta, project.hv.transformers));

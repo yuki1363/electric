@@ -11,7 +11,7 @@ import { contentBBox, fitDiagram } from '../src/layout/fit';
 
 describe('高圧受電設備 単線結線図 生成', () => {
   const p = sampleProject();
-  const { diagram: d, warnings } = generateHvSld(p.hv, p.meta, p.panels);
+  const { diagram: d, warnings } = generateHvSld(p.hv, p.meta, p.panels)[0]!;
 
   it('警告なしで生成される', () => {
     expect(warnings).toEqual([]);
@@ -102,8 +102,8 @@ describe('高圧受電設備 単線結線図 生成', () => {
 
   it('PF・S 形は PF と LBS を主遮断装置として描く', () => {
     const hv = { ...p.hv, mainBreaker: { type: 'PF-S' as const, lbs: { ratedA: 300 }, pfA: 40 } };
-    const r = generateHvSld(hv, p.meta, p.panels);
-    const kinds = r.diagram.elements.map((e) => e.kind);
+    const rs = generateHvSld(hv, p.meta, p.panels);
+    const kinds = rs[0]!.diagram.elements.map((e) => e.kind);
     expect(kinds).not.toContain('VCB');
     expect(kinds).not.toContain('CT');
     expect(kinds.filter((k) => k === 'PF').length).toBe(1 + p.hv.transformers.length + p.hv.capacitors.length);
@@ -111,8 +111,8 @@ describe('高圧受電設備 単線結線図 生成', () => {
 
   it('A4 では自動縮尺で用紙に収まる', () => {
     const meta = { ...p.meta, sheet: { ...p.meta.sheet, size: 'A4' as const } };
-    const r = generateHvSld(p.hv, meta, p.panels);
-    const fit = fitDiagram(r.diagram);
+    const rs = generateHvSld(p.hv, meta, p.panels);
+    const fit = fitDiagram(rs[0]!.diagram);
     expect(fit.scale).toBeLessThan(1);
     expect(fit.overflow).toBe(false);
     const g = sheetGeom(fit.diagram.sheet);
@@ -142,7 +142,7 @@ describe('高圧分岐盤', () => {
     transformers: p.hv.transformers.map((t, i) => ({ ...t, feederId: i === 0 ? 'f1' : undefined })),
     capacitors: p.hv.capacitors.map((c) => ({ ...c, feederId: 'f2' })),
   };
-  const { diagram: d, warnings } = generateHvSld(hv, p.meta, p.panels);
+  const { diagram: d, warnings } = generateHvSld(hv, p.meta, p.panels)[0]!;
 
   it('分岐盤ごとに VCB / CT / OCR / ケーブルヘッドを描く', () => {
     expect(warnings).toEqual([]);
@@ -168,12 +168,12 @@ describe('高圧分岐盤', () => {
   });
 
   it('配下が無い分岐盤は負荷矢印で行き先を示す', () => {
-    const lone = generateHvSld(
+    const loneAll = generateHvSld(
       { ...p.hv, feeders: [{ ...feeders[0]!, cable: undefined }], transformers: [], capacitors: [] },
       p.meta,
       p.panels,
     );
-    const arrows = lone.diagram.elements.filter((e) => e.kind === 'LOAD_ARROW');
+    const arrows = loneAll[0]!.diagram.elements.filter((e) => e.kind === 'LOAD_ARROW');
     expect(arrows.length).toBe(1);
     expect(arrows[0]!.labels[0]).toBe('負荷へ');
   });
@@ -192,8 +192,8 @@ describe('高圧分岐盤', () => {
       })),
       capacitors: [],
     };
-    const r = generateHvSld(many, p.meta, p.panels);
-    const fit = fitDiagram(r.diagram);
+    const rs = generateHvSld(many, p.meta, p.panels);
+    const fit = fitDiagram(rs[0]!.diagram);
     expect(fit.overflow).toBe(false);
     const g = sheetGeom(fit.diagram.sheet);
     const b = contentBBox(fit.diagram);
@@ -203,8 +203,8 @@ describe('高圧分岐盤', () => {
 
   it('存在しない分岐盤を指す機器は母線直結として扱う', () => {
     const orphan = { ...p.hv, feeders: [], transformers: p.hv.transformers.map((t) => ({ ...t, feederId: 'nope' })) };
-    const r = generateHvSld(orphan, p.meta, p.panels);
-    expect(r.warnings).toEqual([]);
-    expect(r.diagram.elements.filter((e) => e.kind.startsWith('TR_')).length).toBe(p.hv.transformers.length);
+    const rs = generateHvSld(orphan, p.meta, p.panels);
+    expect(rs[0]!.warnings).toEqual([]);
+    expect(rs[0]!.diagram.elements.filter((e) => e.kind.startsWith('TR_')).length).toBe(p.hv.transformers.length);
   });
 });

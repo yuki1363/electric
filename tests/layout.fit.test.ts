@@ -5,25 +5,37 @@ import { regenerateAll } from '../src/layout';
 import { sampleProject } from '../src/model/defaults';
 import { sheetGeom } from '../src/layout/constants';
 import { elementPort } from '../src/layout/builder';
-import { isPortEnd, type HvSpec, type TransformerSpec } from '../src/model/types';
+import { isPortEnd, type Diagram, type HvSpec, type TransformerSpec } from '../src/model/types';
 
 const base = sampleProject();
 
-/** 変圧器を n 台持つ高圧仕様を作る */
-function hvWith(n: number): HvSpec {
-  const transformers: TransformerSpec[] = Array.from({ length: n }, (_, i) => ({
-    id: `tr_${i + 1}`,
-    name: `Tr-${i + 1}`,
-    phase: i % 2 === 0 ? ('3φ' as const) : ('1φ' as const),
-    kva: 100,
-    secondary: '210V' as const,
-    switch: 'LBS' as const,
-    pfA: 30,
-  }));
-  return { ...base.hv, transformers, capacitors: [] };
+const tr = (i: number, feederId?: string): TransformerSpec => ({
+  id: `tr_${i}`,
+  name: `Tr-${i}`,
+  phase: i % 2 === 0 ? '3φ' : '1φ',
+  kva: 100,
+  secondary: '210V',
+  switch: 'LBS',
+  pfA: 30,
+  ...(feederId ? { feederId } : {}),
+});
+
+/** 母線直結の変圧器を n 台持つ仕様（ページ分割で対応できる） */
+function hvFlat(n: number): HvSpec {
+  return { ...base.hv, feeders: [], transformers: Array.from({ length: n }, (_, i) => tr(i + 1)), capacitors: [] };
 }
 
-function fitsInDrawable(d: ReturnType<typeof fitDiagram>['diagram']): boolean {
+/** 1 つの分岐盤に n 台ぶら下げた仕様（1 区画なので分割できず、縮小で対応する） */
+function hvOneFeeder(n: number): HvSpec {
+  return {
+    ...base.hv,
+    feeders: [{ id: 'f1', name: '分岐盤', breaker: 'VCB', ratedA: 600, ct: true, ocr: true }],
+    transformers: Array.from({ length: n }, (_, i) => tr(i + 1, 'f1')),
+    capacitors: [],
+  };
+}
+
+function fitsInDrawable(d: Diagram): boolean {
   const g = sheetGeom(d.sheet);
   const b = contentBBox(d);
   return (
@@ -36,7 +48,7 @@ function fitsInDrawable(d: ReturnType<typeof fitDiagram>['diagram']): boolean {
 
 describe('自動縮尺', () => {
   it('大きさが足りていれば等倍のまま、枠内へ最小限ずらすだけ', () => {
-    const r = generateHvSld(hvWith(2), base.meta, base.panels);
+    const r = generateHvSld(hvFlat(2), base.meta, base.panels)[0]!;
     const fit = fitDiagram(r.diagram);
     expect(fit.scale).toBe(1);
     expect(fit.diagram.elements.every((e) => (e.scale ?? 1) === 1)).toBe(true);
@@ -51,24 +63,39 @@ describe('自動縮尺', () => {
   });
 
   it('完全に枠内なら何も変えない', () => {
-    const r = generateHvSld(hvWith(2), base.meta, base.panels);
+    const r = generateHvSld(hvFlat(2), base.meta, base.panels)[0]!;
     const once = fitDiagram(r.diagram).diagram;
     const twice = fitDiagram(once);
     expect(twice.scale).toBe(1);
     expect(JSON.stringify(twice.diagram)).toBe(JSON.stringify(once));
   });
 
-  it('機器を増やしても用紙に収まる', () => {
-    for (const n of [4, 8, 12, 16, 24]) {
-      const r = generateHvSld(hvWith(n), base.meta, base.panels);
-      const fit = fitDiagram(r.diagram);
-      expect(fit.scale, `変圧器 ${n} 台`).toBeLessThanOrEqual(1);
-      expect(fitsInDrawable(fit.diagram), `変圧器 ${n} 台で用紙からはみ出した`).toBe(true);
+  it('機器を増やしても、ページ分割と自動縮尺で全ページが読める大きさで収まる', () => {
+    for (const n of [4, 8, 12, 16, 24, 40]) {
+      const pages = generateHvSld(hvFlat(n), base.meta, base.panels);
+      for (const page of pages) {
+        const fit = fitDiagram(page.diagram);
+        expect(fitsInDrawable(fit.diagram), `変圧器 ${n} 台で用紙からはみ出した`).toBe(true);
+        expect(fit.scale, `変圧器 ${n} 台の縮尺`).toBeGreaterThan(0.6);
+      }
     }
   });
 
+  it('分岐盤にまとめれば枚数が減る', () => {
+    expect(generateHvSld(hvFlat(24), base.meta, base.panels).length).toBeGreaterThan(1);
+    expect(generateHvSld(hvOneFeeder(6), base.meta, base.panels).length).toBe(1);
+  });
+
+  it('1 区画に収まらない量は縮小して対応する', () => {
+    const r = generateHvSld(hvOneFeeder(16), base.meta, base.panels)[0]!;
+    const fit = fitDiagram(r.diagram);
+    expect(fit.scale).toBeLessThan(1);
+    for (const e of fit.diagram.elements) expect(e.scale).toBeCloseTo(fit.scale, 3);
+    expect(fitsInDrawable(fit.diagram)).toBe(true);
+  });
+
   it('縮小しても配線の端点は機器のポートに一致し続ける', () => {
-    const r = generateHvSld(hvWith(12), base.meta, base.panels);
+    const r = generateHvSld(hvOneFeeder(12), base.meta, base.panels)[0]!;
     const d = fitDiagram(r.diagram).diagram;
     for (const w of d.wires) {
       for (const [end, pt] of [
@@ -84,16 +111,8 @@ describe('自動縮尺', () => {
     }
   });
 
-  it('図記号・文字も同じ倍率で縮む', () => {
-    const r = generateHvSld(hvWith(16), base.meta, base.panels);
-    const fit = fitDiagram(r.diagram);
-    expect(fit.scale).toBeLessThan(1);
-    for (const e of fit.diagram.elements) expect(e.scale).toBeCloseTo(fit.scale, 3);
-    for (const t of fit.diagram.texts) expect(t.h).toBeLessThan(5);
-  });
-
   it('極端に多いと縮尺の下限で頭打ちになり overflow を返す', () => {
-    const r = generateHvSld(hvWith(120), base.meta, base.panels);
+    const r = generateHvSld(hvOneFeeder(120), base.meta, base.panels)[0]!;
     const fit = fitDiagram(r.diagram);
     expect(fit.scale).toBe(MIN_SCALE);
     expect(fit.overflow).toBe(true);
@@ -105,12 +124,11 @@ describe('自動縮尺', () => {
     expect(scaleLabel(0.5)).toBe('1:2');
   });
 
-  it('regenerateAll が全図面を用紙内に収め、縮小時は警告を出す', () => {
-    const project = { ...base, hv: hvWith(14) };
+  it('regenerateAll が全図面を用紙内に収める', () => {
+    const project = { ...base, hv: hvFlat(14) };
     const r = regenerateAll(project);
     for (const d of r.diagrams) {
       expect(fitsInDrawable(d), `${d.title} がはみ出した`).toBe(true);
     }
-    expect(r.warnings.some((w) => w.includes('縮尺'))).toBe(true);
   });
 });

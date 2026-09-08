@@ -7,12 +7,15 @@ export function TextField({
   placeholder,
   className,
   width,
+  list,
 }: {
   value: string;
   onCommit: (v: string) => void;
   placeholder?: string;
   className?: string;
   width?: number | string;
+  /** datalist の id（入力候補） */
+  list?: string;
 }) {
   const [v, setV] = useState(value);
   useEffect(() => setV(value), [value]);
@@ -25,6 +28,7 @@ export function TextField({
       value={v}
       placeholder={placeholder}
       className={className}
+      list={list}
       style={width ? { width } : undefined}
       onChange={(e) => setV(e.target.value)}
       onBlur={commit}
