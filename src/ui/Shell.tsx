@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Point } from '../symbols/types';
+import type { Point, SymbolKind } from '../symbols/types';
 import type { Project } from '../model/types';
 import type { Tool } from './canvas/types';
 import { Palette } from './panels/Palette';
@@ -32,6 +32,8 @@ export function Shell({ state }: { state: AppState }) {
   const [importing, setImporting] = useState(false);
   const [selection, setSelection] = useState<string[]>([]);
   const [tool, setTool] = useState<Tool>('select');
+  /** 配置待ちの図記号（パレットで選ぶと入り、図面をクリックで置く） */
+  const [pending, setPending] = useState<SymbolKind | null>(null);
   const viewCenter = useRef<Point>({ x: 210, y: 148 });
   const onViewChange = useCallback((c: Point) => {
     viewCenter.current = c;
@@ -168,13 +170,7 @@ export function Shell({ state }: { state: AppState }) {
               }}
             />
             {active && (
-              <Palette
-                diagramId={active.id}
-                getViewCenter={() => viewCenter.current}
-                onAdded={(id) => setSelection([id])}
-                tool={tool}
-                onToolChange={setTool}
-              />
+              <Palette tool={tool} onToolChange={setTool} pending={pending} onPendingChange={setPending} />
             )}
           </aside>
           {active ? (
@@ -186,6 +182,8 @@ export function Shell({ state }: { state: AppState }) {
               onSelectionChange={setSelection}
               tool={tool}
               onToolChange={setTool}
+              pending={pending}
+              onPendingChange={setPending}
               onViewChange={onViewChange}
             />
           ) : (

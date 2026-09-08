@@ -144,3 +144,6 @@ input[type=text], input[type=number], input[type=date], select { font: inherit; 
 .grid-table.preview th { position: sticky; top: 0; z-index: 1; }
 .error { color: #c62828; background: #ffebee; padding: 4px 8px; border-radius: 4px; }
 .notice { color: #8a6d00; background: #fff8e1; padding: 6px 8px; border-radius: 4px; }
+
+.palette-hint { margin: 4px 0; padding: 4px 6px; background: #e8f2fd; border: 1px solid var(--accent); border-radius: 3px; font-size: 11px; color: #14507f; }
+.palette-item.active { outline: 2px solid var(--accent); background: #e8f2fd; }

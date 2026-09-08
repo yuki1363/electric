@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Point } from '../../symbols/types';
+import type { Point, SymbolKind } from '../../symbols/types';
 import type { Diagram, Element } from '../../model/types';
 import type { TitleInfo } from '../../layout/sheet';
 import { GRID, PAPER } from '../../layout/constants';
+import { isPortEnd } from '../../model/types';
 import { flattenDiagram, elementLabelLines } from '../../render/flatten';
 import { diagramSvgInner } from '../../render/diagramSvg';
 import { COLOR_GRID, COLOR_PORT, COLOR_SELECTED } from '../../render/style';
@@ -10,7 +11,8 @@ import { elementPorts } from '../../layout/builder';
 import { snapValue } from '../../geom/point';
 import { newId } from '../../model/ids';
 import { useDispatch } from '../../state/context';
-import { elementBBox, itemsInRect, labelLineBBox, textBBox } from './hit';
+import { elementBBox, itemsInRect, labelLineBBox, nearestWireAt, textBBox } from './hit';
+import { getSymbol } from '../../symbols';
 import type { Tool } from './types';
 
 export interface CanvasProps {
@@ -20,6 +22,9 @@ export interface CanvasProps {
   onSelectionChange: (ids: string[]) => void;
   tool: Tool;
   onToolChange: (t: Tool) => void;
+  /** 配置待ちの図記号（tool === 'place' のとき使う） */
+  pending?: SymbolKind | null;
+  onPendingChange?: (k: SymbolKind | null) => void;
   onViewChange?: (center: Point) => void;
   showGrid?: boolean;
   readOnly?: boolean;
@@ -42,6 +47,9 @@ interface PortPick {
   p: Point;
 }
 
+/** ドラッグ中に相手の中心線へ吸い付く距離 mm */
+const SNAP_TOL = 3;
+
 /** 図面編集キャンバス */
 export function Canvas({
   diagram,
@@ -50,6 +58,8 @@ export function Canvas({
   onSelectionChange,
   tool,
   onToolChange,
+  pending = null,
+  onPendingChange,
   onViewChange,
   showGrid = true,
   readOnly = false,
@@ -109,6 +119,7 @@ export function Canvas({
       if (readOnly) return;
       if (e.key === 'Escape') {
         setWireFrom(null);
+        onPendingChange?.(null);
         if (tool !== 'select') onToolChange('select');
         else onSelectionChange([]);
         return;
@@ -217,6 +228,24 @@ export function Canvas({
       return;
     }
 
+    if (tool === 'place') {
+      if (!pending) return;
+      const def = getSymbol(pending);
+      const at = { x: snapValue(w.x, GRID), y: snapValue(w.y, GRID) };
+      const el = { id: newId('e'), kind: pending, x: at.x, y: at.y, rot: 0 as const, labels: [...(def.defaultLabels ?? [])] };
+      // 配線の上に置いたら、その線を 2 本に分けて途中に入れる
+      const wireId = nearestWireAt(diagram, w, 2.5);
+      dispatch(
+        wireId
+          ? { type: 'INSERT_INTO_WIRE', diagramId: diagram.id, wireId, element: el }
+          : { type: 'ADD_ELEMENT', diagramId: diagram.id, element: el },
+      );
+      onSelectionChange([el.id]);
+      onPendingChange?.(null);
+      onToolChange('select');
+      return;
+    }
+
     if (tool === 'text') {
       const id = newId('t');
       dispatch({
@@ -256,6 +285,39 @@ export function Canvas({
     host.setPointerCapture(e.pointerId);
   };
 
+  /**
+   * ドラッグ中の吸着。1 個だけ動かしているとき、配線でつながっている相手と
+   * x（または y）が近ければその値に合わせる。routeWire は同一 x/y なら直線を引くので、
+   * これだけで線の折れ曲がりが消える。
+   */
+  const snapToPeers = (ids: string[], dx: number, dy: number): { dx: number; dy: number } => {
+    if (ids.length !== 1) return { dx, dy };
+    const el = diagram.elements.find((e) => e.id === ids[0]);
+    if (!el) return { dx, dy };
+    const peers = new Set<string>();
+    for (const w of diagram.wires) {
+      const f = isPortEnd(w.from) ? w.from.elementId : null;
+      const t = isPortEnd(w.to) ? w.to.elementId : null;
+      if (f === el.id && t) peers.add(t);
+      if (t === el.id && f) peers.add(f);
+    }
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (const e of diagram.elements) {
+      if (!peers.has(e.id)) continue;
+      xs.push(e.x);
+      ys.push(e.y);
+    }
+    const pull = (v: number, cands: number[]) => {
+      let best: number | null = null;
+      for (const c of cands) if (Math.abs(c - v) <= SNAP_TOL && (best === null || Math.abs(c - v) < Math.abs(best - v))) best = c;
+      return best;
+    };
+    const nx = pull(el.x + dx, xs);
+    const ny = pull(el.y + dy, ys);
+    return { dx: nx === null ? dx : nx - el.x, dy: ny === null ? dy : ny - el.y };
+  };
+
   const onPointerMove = (e: React.PointerEvent) => {
     const d = dragRef.current;
     if (tool === 'wire') setHoverPos(toWorld(e));
@@ -266,8 +328,7 @@ export function Canvas({
     }
     const w = toWorld(e);
     if (d.kind === 'move') {
-      const dx = snapValue(w.x - d.start.x, GRID);
-      const dy = snapValue(w.y - d.start.y, GRID);
+      const { dx, dy } = snapToPeers(d.ids, snapValue(w.x - d.start.x, GRID), snapValue(w.y - d.start.y, GRID));
       if (dx !== 0 || dy !== 0 || d.moved) {
         dispatch({ type: 'MOVE_PREVIEW', diagramId: diagram.id, ids: d.ids, dx, dy });
         if (!d.moved) setDragBoth({ ...d, moved: true });
@@ -310,6 +371,8 @@ export function Canvas({
   const px = (n: number) => n / view.zoom; // 画面ピクセル → 用紙 mm
 
   const showPorts = tool === 'wire';
+  /** 端子は常に薄く見せる。当たり判定は配線ツール中と選択中だけ */
+  const portElements = readOnly ? [] : diagram.elements;
   const selectedElements: Element[] = diagram.elements.filter((e) => selSet.has(e.id));
 
   return (
@@ -440,11 +503,12 @@ export function Canvas({
         </g>
 
         {/* ポート */}
-        {(showPorts || selectedElements.length > 0) && !readOnly && (
+        {portElements.length > 0 && (
           <g className="ports">
-            {(showPorts ? diagram.elements : selectedElements).map((e) =>
+            {portElements.map((e) =>
               elementPorts(e).map((p) => {
-                const s = px(6);
+                const strong = showPorts || selSet.has(e.id);
+                const s = px(strong ? 6 : 3.5);
                 const active = wireFrom && wireFrom.elementId === e.id && wireFrom.portId === p.id;
                 return (
                   <rect
@@ -458,9 +522,10 @@ export function Canvas({
                     height={s}
                     fill={active ? COLOR_SELECTED : COLOR_PORT}
                     stroke="#fff"
-                    strokeWidth={px(1)}
+                    strokeWidth={px(strong ? 1 : 0.5)}
+                    opacity={strong ? 1 : 0.45}
                     className="port"
-                    pointerEvents={showPorts ? 'all' : 'none'}
+                    pointerEvents={strong ? 'all' : 'none'}
                   />
                 );
               }),

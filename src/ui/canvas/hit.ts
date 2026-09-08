@@ -58,3 +58,25 @@ export function itemKind(d: Diagram, id: string): 'element' | 'wire' | 'text' | 
   if (d.texts.some((t) => t.id === id)) return 'text';
   return null;
 }
+
+/** 点と直交線分の距離 */
+function distToSegment(p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-12) return Math.hypot(p.x - a.x, p.y - a.y);
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+/** p から tol mm 以内にある最も近い配線 */
+export function nearestWireAt(d: Diagram, p: { x: number; y: number }, tol: number): string | null {
+  let best: { id: string; d: number } | null = null;
+  for (const w of d.wires) {
+    for (let i = 1; i < w.points.length; i++) {
+      const dist = distToSegment(p, w.points[i - 1]!, w.points[i]!);
+      if (dist <= tol && (!best || dist < best.d)) best = { id: w.id, d: dist };
+    }
+  }
+  return best ? best.id : null;
+}

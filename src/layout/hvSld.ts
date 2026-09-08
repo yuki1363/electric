@@ -402,7 +402,7 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     if (leaf.kind === 'tr') {
       const t = leaf.spec;
       const tr = b.el(t.phase === '1φ' ? 'TR_1PH' : 'TR_3PH', bx, yy + 20, {
-        labels: withModel([t.name, `${t.phase} ${t.kva}kVA`, `6.6kV/${t.secondary}`], t.nameplate),
+        labels: withModel([t.name, `${t.phase} ${t.kva}kVA`, `${t.primary || '6.6kV'}/${t.secondary}`], t.nameplate),
         props: { kva: t.kva, phase: t.phase, secondary: t.secondary },
       });
       b.wire(last, 'S', tr, 'N');

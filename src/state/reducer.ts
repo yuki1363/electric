@@ -91,6 +91,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return commit(withDiagram(p, action.diagramId, (d) => ops.updateElement(d, action.id, action.patch)));
     case 'ADD_ELEMENT':
       return commit(withDiagram(p, action.diagramId, (d) => ops.addElement(d, action.element)));
+    case 'INSERT_INTO_WIRE':
+      return commit(withDiagram(p, action.diagramId, (d) => ops.insertIntoWire(d, action.wireId, action.element)));
     case 'ADD_WIRE':
       return commit(withDiagram(p, action.diagramId, (d) => ops.addWire(d, action.wire)));
     case 'UPDATE_WIRE':

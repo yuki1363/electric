@@ -10,6 +10,9 @@ import { CheckField, NumberField, Row, Section, SelectField, SwitchPicker, TextF
 /** 二次電圧の入力候補（任意の値も入力できる） */
 const SECONDARY_OPTIONS = ['105-210V', '210V', '105V', '420V', '440V', '400V', '210/105V'];
 
+/** 一次電圧の入力候補。低圧用変圧器も作れるよう任意の値を入れられる */
+const PRIMARY_OPTIONS = ['6.6kV', '440V', '420V', '400V', '210V'];
+
 export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
   const dispatch = useDispatch();
   const set = (patch: Partial<HvSpec>) => dispatch({ type: 'SET_HV', hv: { ...hv, ...patch } });
@@ -111,6 +114,11 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
     <div>
       <datalist id="secondary-options">
         {SECONDARY_OPTIONS.map((v) => (
+          <option key={v} value={v} />
+        ))}
+      </datalist>
+      <datalist id="primary-options">
+        {PRIMARY_OPTIONS.map((v) => (
           <option key={v} value={v} />
         ))}
       </datalist>
@@ -304,6 +312,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                   <th>名称</th>
                   <th>相</th>
                   <th>容量 kVA</th>
+                  <th>一次電圧</th>
                   <th>二次電圧</th>
                   <th>開閉器</th>
                   <th>PF A</th>
@@ -321,6 +330,15 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                       <SelectField value={t.phase} options={[{ value: '1φ', label: '単相' }, { value: '3φ', label: '三相' }]} onChange={(v) => setTr(t.id, { phase: v })} />
                     </td>
                     <td><NumberField value={t.kva} onCommit={(v) => setTr(t.id, { kva: v ?? 100 })} /></td>
+                    <td>
+                      <TextField
+                        value={t.primary ?? ''}
+                        width={80}
+                        placeholder="6.6kV"
+                        list="primary-options"
+                        onCommit={(v) => setTr(t.id, { primary: v || undefined })}
+                      />
+                    </td>
                     <td>
                       <TextField value={t.secondary} width={90} list="secondary-options" onCommit={(v) => setTr(t.id, { secondary: v })} />
                     </td>

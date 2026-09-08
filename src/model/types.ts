@@ -104,6 +104,8 @@ export interface TransformerSpec {
   name: string;
   phase: TrPhase;
   kva: number;
+  /** 一次電圧。低圧用変圧器（440V→210V など）にも使えるよう入力できる */
+  primary?: string;
   secondary: TrSecondary;
   /** 高圧側の開閉装置。空なら開閉器なし（母線・分岐盤に直結） */
   devices: SwitchDevice[];

@@ -18,6 +18,7 @@ export type Action =
   | { type: 'CANCEL_PREVIEW' }
   | { type: 'UPDATE_ELEMENT'; diagramId: string; id: string; patch: Partial<Element> }
   | { type: 'ADD_ELEMENT'; diagramId: string; element: Element }
+  | { type: 'INSERT_INTO_WIRE'; diagramId: string; wireId: string; element: Element }
   | { type: 'ADD_WIRE'; diagramId: string; wire: Wire }
   | { type: 'UPDATE_WIRE'; diagramId: string; id: string; patch: Partial<Wire> }
   | { type: 'ADD_TEXT'; diagramId: string; text: TextItem }
