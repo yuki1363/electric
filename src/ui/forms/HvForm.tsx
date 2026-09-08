@@ -316,7 +316,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                   <th>二次電圧</th>
                   <th>開閉器</th>
                   <th>PF A</th>
-                  <th>所属分岐盤</th>
+                  <th>電源</th>
                   <th>給電先</th>
                   <th>銘板</th>
                   <th></th>
@@ -351,11 +351,31 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                       )}
                     </td>
                     <td>
-                      <select value={t.feederId ?? ''} onChange={(e) => setTr(t.id, e.target.value ? { feederId: e.target.value } : { feederId: undefined })}>
+                      <select
+                        value={t.sourcePanelId ? `p:${t.sourcePanelId}` : t.feederId ? `f:${t.feederId}` : ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setTr(t.id, {
+                            feederId: v.startsWith('f:') ? v.slice(2) : undefined,
+                            sourcePanelId: v.startsWith('p:') ? v.slice(2) : undefined,
+                          });
+                        }}
+                      >
                         <option value="">高圧母線に直結</option>
-                        {hv.feeders.map((f) => (
-                          <option key={f.id} value={f.id}>{f.name}</option>
-                        ))}
+                        {hv.feeders.length > 0 && (
+                          <optgroup label="高圧分岐盤">
+                            {hv.feeders.map((f) => (
+                              <option key={f.id} value={`f:${f.id}`}>{f.name}</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {panels.length > 0 && (
+                          <optgroup label="分電盤（低圧 → 低圧）">
+                            {panels.map((p) => (
+                              <option key={p.id} value={`p:${p.id}`}>{p.name}</option>
+                            ))}
+                          </optgroup>
+                        )}
                       </select>
                     </td>
                     <td>

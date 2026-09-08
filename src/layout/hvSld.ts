@@ -48,7 +48,8 @@ const columnsOf = (g0: Group) => (g0.kind === 'feeder' ? Math.max(1, g0.leaves.l
 /** 仕様から母線上の区画を組み立てる */
 function buildGroups(hv: HvSpec): Group[] {
   const leaves: Leaf[] = [
-    ...hv.transformers.map((spec): Leaf => ({ kind: 'tr', spec })),
+    // 電源が低圧の分電盤の変圧器は、その分電盤の図面に描くのでここには出さない
+    ...hv.transformers.filter((t) => !t.sourcePanelId).map((spec): Leaf => ({ kind: 'tr', spec })),
     ...hv.capacitors.map((spec): Leaf => ({ kind: 'sc', spec })),
   ];
   return [
