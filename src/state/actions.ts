@@ -1,4 +1,5 @@
 import type { Point } from '../symbols/types';
+import type { AlignMode } from './diagramOps';
 import type { Element, HvSpec, LvPanelSpec, Project, ProjectMeta, TextItem, Wire } from '../model/types';
 
 export type Action =
@@ -24,6 +25,7 @@ export type Action =
   | { type: 'ADD_TEXT'; diagramId: string; text: TextItem }
   | { type: 'UPDATE_TEXT'; diagramId: string; id: string; patch: Partial<TextItem> }
   | { type: 'DELETE_ITEMS'; diagramId: string; ids: string[] }
-  | { type: 'ALIGN_ITEMS'; diagramId: string; ids: string[]; mode: 'left' | 'top' | 'centerX' | 'centerY' }
+  | { type: 'ALIGN_ITEMS'; diagramId: string; ids: string[]; mode: AlignMode }
+  | { type: 'DISTRIBUTE_ITEMS'; diagramId: string; ids: string[]; axis: 'x' | 'y' }
   | { type: 'UNDO' }
   | { type: 'REDO' };

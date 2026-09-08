@@ -225,6 +225,12 @@ export interface HvSpec {
     as?: boolean;
     /** 電圧計切換開閉器（未指定なら付ける） */
     vs?: boolean;
+    /**
+     * VT ヒューズの向き。
+     * 'vertical'（既定）: VT の真上に縦に入れる。直列の 2 台が同じ列に並ぶ
+     * 'horizontal': 引き出し線の途中に横向きで入れる。縦に 20mm 詰められる
+     */
+    vtfLayout?: 'vertical' | 'horizontal';
   };
   feeders: HvFeederSpec[];
   transformers: TransformerSpec[];

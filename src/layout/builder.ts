@@ -5,6 +5,7 @@ import { isPortEnd } from '../model/types';
 import { getSymbol } from '../symbols';
 import { portToWorld } from '../symbols/transform';
 import { seqId } from '../model/ids';
+import { bboxOfRect, type BBox } from '../geom/bbox';
 import { routeWire, stretchEnd, type RouteEnd } from './router';
 
 export interface ElOpts {
@@ -13,6 +14,16 @@ export interface ElOpts {
   labelOffset?: Point;
   props?: Record<string, string | number | boolean>;
   id?: string;
+}
+
+/** 図記号の外形（回転・縮尺を反映したワールド座標の矩形） */
+export function elementBBox(el: Element): BBox {
+  const def = getSymbol(el.kind);
+  const k = el.scale ?? 1;
+  const swap = el.rot === 90 || el.rot === 270;
+  const w = Math.max((swap ? def.bbox.h : def.bbox.w) * k, 4 * k);
+  const h = Math.max((swap ? def.bbox.w : def.bbox.h) * k, 4 * k);
+  return bboxOfRect(el.x, el.y, w, h);
 }
 
 /** 要素のポートをワールド座標で返す */

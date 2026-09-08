@@ -5,6 +5,7 @@ import { getSymbol } from '../../symbols';
 import { GRID } from '../../layout/constants';
 import { snapValue } from '../../geom/point';
 import { useDispatch } from '../../state/context';
+import type { AlignMode } from '../../state/diagramOps';
 import { NumberField, Row, SelectField, TextField } from '../fields';
 
 export function PropertiesPanel({
@@ -37,15 +38,40 @@ export function PropertiesPanel({
   }
 
   if (selection.length > 1) {
-    const align = (mode: 'left' | 'top') => dispatch({ type: 'ALIGN_ITEMS', diagramId: diagram.id, ids: selection, mode });
+    const align = (mode: AlignMode) => dispatch({ type: 'ALIGN_ITEMS', diagramId: diagram.id, ids: selection, mode });
+    const distribute = (axis: 'x' | 'y') =>
+      dispatch({ type: 'DISTRIBUTE_ITEMS', diagramId: diagram.id, ids: selection, axis });
+    const nEl = diagram.elements.filter((e) => selection.includes(e.id)).length;
     return (
       <div className="props">
         <h3>{selection.length} 項目を選択中</h3>
+        <div className="align-group">
+          <div className="muted">縦に並べる（左右をそろえる）</div>
+          <div className="btn-row">
+            <button onClick={() => align('left')} title="外形の左端をそろえる">左</button>
+            <button onClick={() => align('centerX')} title="中心線を縦にそろえる（配線が真っすぐになります）">左右中央</button>
+            <button onClick={() => align('right')} title="外形の右端をそろえる">右</button>
+          </div>
+        </div>
+        <div className="align-group">
+          <div className="muted">横に並べる（上下をそろえる）</div>
+          <div className="btn-row">
+            <button onClick={() => align('top')} title="外形の上端をそろえる">上</button>
+            <button onClick={() => align('centerY')} title="中心線を横にそろえる（配線が真っすぐになります）">上下中央</button>
+            <button onClick={() => align('bottom')} title="外形の下端をそろえる">下</button>
+          </div>
+        </div>
+        <div className="align-group">
+          <div className="muted">等間隔に並べる（3 台以上）</div>
+          <div className="btn-row">
+            <button disabled={nEl < 3} onClick={() => distribute('x')}>左右</button>
+            <button disabled={nEl < 3} onClick={() => distribute('y')}>上下</button>
+          </div>
+        </div>
         <div className="btn-row">
-          <button onClick={() => align('left')}>左揃え</button>
-          <button onClick={() => align('top')}>上揃え</button>
           <button onClick={del}>削除</button>
         </div>
+        <p className="muted">整列は図記号だけが動きます。つながっている配線は自動で引き直します。</p>
       </div>
     );
   }

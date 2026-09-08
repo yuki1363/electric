@@ -20,10 +20,6 @@ const BP_MIN = 35;
 
 type MeterKind = 'METER_V' | 'METER_A' | 'METER_W' | 'METER_PF' | 'METER_WH';
 
-/**
- * 計器が使う計測回路。
- * 電圧計は VT 二次だけ、電流計は CT 二次だけ、電力計・力率計・電力量計は両方を使う。
- */
 /** 計器 → 銘板スロット */
 const METER_SLOT: Record<MeterKind, HvSlot> = {
   METER_A: 'meterA',
@@ -33,6 +29,10 @@ const METER_SLOT: Record<MeterKind, HvSlot> = {
   METER_WH: 'meterWh',
 };
 
+/**
+ * 計器が使う計測回路。
+ * 電圧計は VT 二次だけ、電流計は CT 二次だけ、電力計・力率計・電力量計は両方を使う。
+ */
 const METER_CIRCUIT: Record<MeterKind, { v: boolean; c: boolean }> = {
   METER_V: { v: true, c: false },
   METER_A: { v: false, c: true },
@@ -235,6 +235,8 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     if (hv.metering.pf) meterKinds.push('METER_PF');
     if (hv.metering.wh) meterKinds.push('METER_WH');
     const hasMetering = meterKinds.length > 0 || hv.metering.vt;
+    /** VT ヒューズを VT の真上に縦に入れるか（横型は引き出し線の途中に横向き） */
+    const vtfVertical = (hv.metering.vtfLayout ?? 'vertical') === 'vertical';
     /** CT 二次（電流回路）に入る計器。OCR と直列につなぐ */
     const currKinds = meterKinds.filter((k) => METER_CIRCUIT[k].c);
     /** VT 二次（電圧回路）だけを使う計器 */
@@ -248,8 +250,8 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       tap = b.el('JUNCTION', TX, tapY);
       if (prev) b.wire(prev, 'S', tap, 'N');
       prev = tap;
-      // VT を描くときは、引き下げ線の中に VT ヒューズを縦に入れるぶん間隔をあける
-      y += hv.metering.vt ? 30 : 10;
+      // VT ヒューズを縦に入れるときは、引き下げ線にその高さぶんの余裕をあける
+      y += hv.metering.vt && vtfVertical ? 30 : 10;
 
       if (hv.la) {
         const la = b.el('LA', TX - 40, tapY + 15, { labels: withModel(['LA'], hv.nameplates?.la) });
@@ -324,10 +326,18 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       const vbusY = mY + 15;
       const vt = hv.metering.vt ? b.el('VT', vx, mY, { labels: withModel(['VT'], hv.nameplates?.vt) }) : null;
       if (vt) {
-        // VT ヒューズは VT の真上、引き下げ線の中に縦に入れる（直列の 2 台が同じ列に並ぶ）
-        const vtf = b.el('PF', vx, mY - 20, { labels: withModel(['VTヒューズ'], hv.nameplates?.vtf) });
-        b.wire(tap, 'E', vtf, 'N');
-        b.wire(vtf, 'S', vt, 'N');
+        const vtfLabels = withModel(['VTヒューズ'], hv.nameplates?.vtf);
+        if (vtfVertical) {
+          // VT の真上、引き下げ線の中に縦に入れる（直列の 2 台が同じ列に並ぶ）
+          const vtf = b.el('PF', vx, mY - 20, { labels: vtfLabels });
+          b.wire(tap, 'E', vtf, 'N');
+          b.wire(vtf, 'S', vt, 'N');
+        } else {
+          // 引き出し線の途中に横向きで入れる（縦を詰めたいとき）
+          const vtf = b.el('PF', TX + 30, tapY, { rot: 270, labels: vtfLabels });
+          b.wire(tap, 'E', vtf, 'N');
+          b.wire(vtf, 'S', vt, 'N');
+        }
       }
       if (voltTaps.length > 0) {
         if (vt) b.wireToPoint(vt, 'S', { x: vx, y: vbusY }, 'control');

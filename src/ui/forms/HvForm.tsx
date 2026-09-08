@@ -250,6 +250,17 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
               />
               <span className="muted"> 計器の手前に直列に入ります</span>
             </Row>
+            <Row label="VT ヒューズ">
+              <SelectField
+                value={hv.metering.vtfLayout ?? 'vertical'}
+                width={260}
+                options={[
+                  { value: 'vertical', label: '縦（VT の真上・同じ列にそろえる）' },
+                  { value: 'horizontal', label: '横（引き出し線の途中・縦を 20mm 詰める）' },
+                ]}
+                onChange={(v) => set({ metering: { ...hv.metering, vtfLayout: v } })}
+              />
+            </Row>
             <Row label="接地">
               <CheckField checked={hv.grounding.aType} onChange={(v) => set({ grounding: { ...hv.grounding, aType: v } })} label="A種（筐体・LA）" />{' '}
               <CheckField checked={hv.grounding.bType} onChange={(v) => set({ grounding: { ...hv.grounding, bType: v } })} label="B種（変圧器二次）" />

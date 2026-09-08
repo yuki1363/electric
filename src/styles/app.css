@@ -147,3 +147,6 @@ input[type=text], input[type=number], input[type=date], select { font: inherit; 
 
 .palette-hint { margin: 4px 0; padding: 4px 6px; background: #e8f2fd; border: 1px solid var(--accent); border-radius: 3px; font-size: 11px; color: #14507f; }
 .palette-item.active { outline: 2px solid var(--accent); background: #e8f2fd; }
+
+.align-group { margin-bottom: 6px; }
+.align-group .muted { font-size: 11px; margin-bottom: 2px; }

@@ -105,6 +105,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return commit(withDiagram(p, action.diagramId, (d) => ops.deleteItems(d, new Set(action.ids))));
     case 'ALIGN_ITEMS':
       return commit(withDiagram(p, action.diagramId, (d) => ops.alignItems(d, new Set(action.ids), action.mode)));
+    case 'DISTRIBUTE_ITEMS':
+      return commit(withDiagram(p, action.diagramId, (d) => ops.distributeItems(d, new Set(action.ids), action.axis)));
     case 'UNDO':
       return { ...state, history: undo(h), previewBase: null };
     case 'REDO':

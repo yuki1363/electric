@@ -215,6 +215,36 @@ describe('高圧受電設備 単線結線図 生成', () => {
       expect(d2.wires.some((w) => isPortEnd(w.from) && w.from.elementId === vs.id && !isPortEnd(w.to) && w.to.y === vbusY)).toBe(true);
     });
 
+    it('VT ヒューズは縦・横どちらにも置ける', () => {
+      const build = (vtfLayout: 'vertical' | 'horizontal') =>
+        generateHvSld({ ...p.hv, metering: { ...metering, vtfLayout } }, p.meta, p.panels)[0]!.diagram;
+
+      // 縦: VT の真上・同じ列にそろう
+      const v = build('vertical');
+      const vVt = v.elements.find((e) => e.kind === 'VT')!;
+      const vFuse = v.elements.find((e) => e.kind === 'PF' && e.x === vVt.x)!;
+      expect(vFuse.rot).toBe(0);
+      expect(vVt.y - vFuse.y).toBe(20);
+
+      // 横: 引き出し線の途中に横向きで入り、そのぶん母線が上がる
+      const h = build('horizontal');
+      const hFuse = h.elements.find((e) => e.kind === 'PF' && e.rot === 270)!;
+      expect(hFuse).toBeDefined();
+      const busY = (d: typeof v) => d.wires.find((w) => w.style === 'bus')!.points[0]!.y;
+      expect(busY(h)).toBe(busY(v) - 20);
+
+      // どちらも VT ヒューズ → VT の直列は保つ
+      for (const d of [v, h]) {
+        const vt = d.elements.find((e) => e.kind === 'VT')!;
+        const fuse = d.elements.find((e) => e.kind === 'PF' && (e.x === vt.x ? e.y < vt.y : e.rot === 270))!;
+        expect(
+          d.wires.some(
+            (w) => isPortEnd(w.from) && w.from.elementId === fuse.id && isPortEnd(w.to) && w.to.elementId === vt.id,
+          ),
+        ).toBe(true);
+      }
+    });
+
     it('切換開閉器は外せる', () => {
       const noSw = generateHvSld({ ...p.hv, metering: { ...metering, as: false, vs: false } }, p.meta, p.panels)[0]!.diagram;
       expect(noSw.elements.some((e) => e.kind === 'AS')).toBe(false);

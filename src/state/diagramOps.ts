@@ -1,7 +1,8 @@
 import type { Point } from '../symbols/types';
 import type { Diagram, Element, TextItem, Wire } from '../model/types';
 import { isPortEnd } from '../model/types';
-import { rerouteWire } from '../layout/builder';
+import { elementBBox, rerouteWire } from '../layout/builder';
+import type { BBox } from '../geom/bbox';
 import { getSymbol } from '../symbols';
 import { STUB } from '../layout/constants';
 import { seqId } from '../model/ids';
@@ -159,17 +160,61 @@ export function deleteItems(d: Diagram, ids: ReadonlySet<string>): Diagram {
 }
 
 /** 選択項目の整列 */
-export function alignItems(d: Diagram, ids: ReadonlySet<string>, mode: 'left' | 'top' | 'centerX' | 'centerY'): Diagram {
+/** 整列のしかた。left/right/top/bottom は外形の端、center は中心線をそろえる */
+export type AlignMode = 'left' | 'centerX' | 'right' | 'top' | 'centerY' | 'bottom';
+
+/**
+ * 選択した図記号をそろえる。
+ * 縦に並べたい（左右をそろえたい）ときは left / centerX / right、
+ * 横に並べたい（上下をそろえたい）ときは top / centerY / bottom。
+ */
+export function alignItems(d: Diagram, ids: ReadonlySet<string>, mode: AlignMode): Diagram {
   const els = d.elements.filter((e) => ids.has(e.id));
   if (els.length < 2) return d;
-  const xs = els.map((e) => e.x);
-  const ys = els.map((e) => e.y);
-  const target = mode === 'left' || mode === 'centerX' ? Math.min(...xs) : Math.min(...ys);
+  const boxes = els.map((e) => ({ e, b: elementBBox(e) }));
+  const min = (f: (b: BBox) => number) => Math.min(...boxes.map(({ b }) => f(b)));
+  const max = (f: (b: BBox) => number) => Math.max(...boxes.map(({ b }) => f(b)));
+
+  const horizontal = mode === 'left' || mode === 'centerX' || mode === 'right';
+  const target =
+    mode === 'left'
+      ? min((b) => b.minX)
+      : mode === 'right'
+        ? max((b) => b.maxX)
+        : mode === 'centerX'
+          ? (min((b) => b.minX) + max((b) => b.maxX)) / 2
+          : mode === 'top'
+            ? min((b) => b.minY)
+            : mode === 'bottom'
+              ? max((b) => b.maxY)
+              : (min((b) => b.minY) + max((b) => b.maxY)) / 2;
+
   let out = d;
-  for (const e of els) {
-    const dx = mode === 'left' || mode === 'centerX' ? target - e.x : 0;
-    const dy = mode === 'top' || mode === 'centerY' ? target - e.y : 0;
-    if (dx || dy) out = moveItems(out, new Set([e.id]), dx, dy);
+  for (const { e, b } of boxes) {
+    // 端そろえは外形の端、中心そろえは記号の中心を基準にする
+    const from =
+      mode === 'left' ? b.minX : mode === 'right' ? b.maxX : mode === 'centerX' ? e.x : mode === 'top' ? b.minY : mode === 'bottom' ? b.maxY : e.y;
+    const delta = target - from;
+    if (delta !== 0) out = moveItems(out, new Set([e.id]), horizontal ? delta : 0, horizontal ? 0 : delta);
   }
+  return out;
+}
+
+/** 選択した図記号を、両端はそのままに中心の間隔が等しくなるよう並べ直す */
+export function distributeItems(d: Diagram, ids: ReadonlySet<string>, axis: 'x' | 'y'): Diagram {
+  const els = d.elements.filter((e) => ids.has(e.id));
+  if (els.length < 3) return d;
+  const sorted = [...els].sort((a, b) => (axis === 'x' ? a.x - b.x : a.y - b.y));
+  const first = sorted[0]!;
+  const lastEl = sorted[sorted.length - 1]!;
+  const a0 = axis === 'x' ? first.x : first.y;
+  const a1 = axis === 'x' ? lastEl.x : lastEl.y;
+  const step = (a1 - a0) / (sorted.length - 1);
+  let out = d;
+  sorted.forEach((e, i) => {
+    if (i === 0 || i === sorted.length - 1) return;
+    const delta = a0 + step * i - (axis === 'x' ? e.x : e.y);
+    if (delta !== 0) out = moveItems(out, new Set([e.id]), axis === 'x' ? delta : 0, axis === 'x' ? 0 : delta);
+  });
   return out;
 }
