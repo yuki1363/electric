@@ -64,6 +64,22 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
   /** 未入力のときの既定値。種別だけ入れても断面積が消えないようにする */
   const cableOf = (f: HvFeederSpec) => f.cable ?? { type: 'CVT', sq: 38 };
 
+  /** 電源にできる変圧器（自分自身と、自分の下流にある変圧器は除く） */
+  const sourceCandidates = (id: string): TransformerSpec[] => {
+    const downstream = new Set<string>([id]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const t of hv.transformers) {
+        if (t.sourceTransformerId && downstream.has(t.sourceTransformerId) && !downstream.has(t.id)) {
+          downstream.add(t.id);
+          grew = true;
+        }
+      }
+    }
+    return hv.transformers.filter((t) => !downstream.has(t.id));
+  };
+
   /** 開閉装置以外（CT・OCR・ケーブル・SR）の銘板入力欄 */
   const npItem = (
     key: string,
@@ -352,12 +368,12 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                     </td>
                     <td>
                       <select
-                        value={t.sourcePanelId ? `p:${t.sourcePanelId}` : t.feederId ? `f:${t.feederId}` : ''}
+                        value={t.sourceTransformerId ? `t:${t.sourceTransformerId}` : t.feederId ? `f:${t.feederId}` : ''}
                         onChange={(e) => {
                           const v = e.target.value;
                           setTr(t.id, {
                             feederId: v.startsWith('f:') ? v.slice(2) : undefined,
-                            sourcePanelId: v.startsWith('p:') ? v.slice(2) : undefined,
+                            sourceTransformerId: v.startsWith('t:') ? v.slice(2) : undefined,
                           });
                         }}
                       >
@@ -369,10 +385,12 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                             ))}
                           </optgroup>
                         )}
-                        {panels.length > 0 && (
-                          <optgroup label="分電盤（低圧 → 低圧）">
-                            {panels.map((p) => (
-                              <option key={p.id} value={`p:${p.id}`}>{p.name}</option>
+                        {sourceCandidates(t.id).length > 0 && (
+                          <optgroup label="変圧器の二次側（低圧 → 低圧）">
+                            {sourceCandidates(t.id).map((x) => (
+                              <option key={x.id} value={`t:${x.id}`}>
+                                {x.name}（{x.secondary}）
+                              </option>
                             ))}
                           </optgroup>
                         )}

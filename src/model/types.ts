@@ -116,10 +116,10 @@ export interface TransformerSpec {
   /** 所属する高圧分岐盤 id。未指定なら高圧母線に直結 */
   feederId?: Id;
   /**
-   * 電源が低圧の分電盤のときの盤 id（低圧 → 低圧の変圧器）。
-   * 指定すると高圧単線結線図には描かず、その分電盤の単線結線図に分岐として描く。
+   * 電源が別の変圧器の二次側のときの変圧器 id（低圧 → 低圧の変圧器）。
+   * 6600 → 440 → 440 → 220 のように、高圧単線結線図の中で数珠つなぎに描く。
    */
-  sourcePanelId?: Id;
+  sourceTransformerId?: Id;
   /** 変圧器本体の銘板 */
   nameplate?: Nameplate;
   /** 開閉装置ごとの銘板。キーは機器名の小文字（lbs / pf / vcs / vcb / pc） */
