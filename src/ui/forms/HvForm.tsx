@@ -56,6 +56,9 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
       capacitors: hv.capacitors.map((c) => (c.feederId === id ? { ...c, feederId: undefined } : c)),
     });
 
+  /** 未入力のときの既定値。種別だけ入れても断面積が消えないようにする */
+  const cableOf = (f: HvFeederSpec) => f.cable ?? { type: 'CVT', sq: 38 };
+
   const setSlotNp = (slot: HvSlot, np: Nameplate) =>
     set({ nameplates: { ...hv.nameplates, [slot]: np } });
 
@@ -188,7 +191,9 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                   <th>CT</th>
                   <th>CT 比</th>
                   <th>OCR</th>
-                  <th>ケーブル</th>
+                  <th>ケーブル種別</th>
+                  <th>sq</th>
+                  <th>長さ m</th>
                   <th>負荷名</th>
                   <th></th>
                 </tr>
@@ -217,13 +222,30 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                     <td><CheckField checked={f.ocr} onChange={(v) => setFeeder(f.id, { ocr: v })} label="" /></td>
                     <td>
                       <TextField
-                        value={f.cable ? `${f.cable.type} ${f.cable.sq}` : ''}
-                        width={100}
-                        placeholder="CVT 38"
-                        onCommit={(v) => {
-                          const m = v.trim().match(/^(\S+)\s+(\d+(?:\.\d+)?)/);
-                          setFeeder(f.id, { cable: m ? { type: m[1]!, sq: Number(m[2]) } : undefined });
-                        }}
+                        value={f.cable?.type ?? ''}
+                        width={70}
+                        placeholder="CVT"
+                        onCommit={(v) => setFeeder(f.id, { cable: v ? { ...cableOf(f), type: v } : undefined })}
+                      />
+                    </td>
+                    <td>
+                      <NumberField
+                        value={f.cable?.sq}
+                        width={60}
+                        allowEmpty
+                        onCommit={(v) => setFeeder(f.id, { cable: { ...cableOf(f), sq: v ?? 38 } })}
+                      />
+                    </td>
+                    <td>
+                      <NumberField
+                        value={f.cable?.lengthM}
+                        width={60}
+                        allowEmpty
+                        onCommit={(v) =>
+                          setFeeder(f.id, {
+                            cable: { ...cableOf(f), ...(v === undefined ? { lengthM: undefined } : { lengthM: v }) },
+                          })
+                        }
                       />
                     </td>
                     <td><TextField value={f.loadName ?? ''} width={110} onCommit={(v) => setFeeder(f.id, { loadName: v || undefined })} /></td>

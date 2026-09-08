@@ -204,8 +204,12 @@ export const OCR: SymbolDef = {
   nameJa: '過電流継電器 (OCR)',
   category: 'hv',
   bbox: { w: 20, h: 10 },
-  prims: [L(-10, 0, -8, 0), RECT(-8, -5, 8, 5), T(0, 0, 'OCR', 3)],
-  ports: [{ id: 'W', x: -10, y: 0, dir: 'W' }],
+  prims: [L(-10, 0, -8, 0), RECT(-8, -5, 8, 5), T(0, 0, 'OCR', 3), L(8, 0, 10, 0)],
+  // E は CT 二次側の続き（電流計などが直列に入る）
+  ports: [
+    { id: 'W', x: -10, y: 0, dir: 'W' },
+    { id: 'E', x: 10, y: 0, dir: 'E' },
+  ],
   labelAnchor: rightLabel(20),
   defaultLabels: [],
 };

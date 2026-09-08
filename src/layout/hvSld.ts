@@ -1,5 +1,5 @@
 import type { Element, HvSpec, LvPanelSpec, ProjectMeta } from '../model/types';
-import type { SymbolKind, SymbolKind as SK } from '../symbols/types';
+import type { SymbolKind as SK } from '../symbols/types';
 import { DiagramBuilder } from './builder';
 import { GRID, TEXT, sheetGeom } from './constants';
 import { snapValue } from '../geom/point';
@@ -12,6 +12,22 @@ const TP = 20;
 /** 分岐ピッチ（既定と、詰められる下限） */
 const BP_DEFAULT = 45;
 const BP_MIN = 35;
+/** 計器の横ピッチ */
+const MP = 20;
+
+type MeterKind = 'METER_V' | 'METER_A' | 'METER_W' | 'METER_PF' | 'METER_WH';
+
+/**
+ * 計器が使う計測回路。
+ * 電圧計は VT 二次だけ、電流計は CT 二次だけ、電力計・力率計・電力量計は両方を使う。
+ */
+const METER_CIRCUIT: Record<MeterKind, { v: boolean; c: boolean }> = {
+  METER_V: { v: true, c: false },
+  METER_A: { v: false, c: true },
+  METER_W: { v: true, c: true },
+  METER_PF: { v: true, c: true },
+  METER_WH: { v: true, c: true },
+};
 
 type Leaf =
   | { kind: 'tr'; spec: HvSpec['transformers'][number] }
@@ -151,18 +167,25 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     // 断路器
     if (hv.ds) place('DS', withModel(['DS'], hv.nameplates?.ds));
 
-    // 分岐点（LA・計器）
-    const meterKinds: SymbolKind[] = [];
+    // 計器の構成
+    const meterKinds: MeterKind[] = [];
     if (hv.metering.v) meterKinds.push('METER_V');
     if (hv.metering.a) meterKinds.push('METER_A');
     if (hv.metering.w) meterKinds.push('METER_W');
     if (hv.metering.pf) meterKinds.push('METER_PF');
     if (hv.metering.wh) meterKinds.push('METER_WH');
     const hasMetering = meterKinds.length > 0 || hv.metering.vt;
+    /** CT 二次（電流回路）に入る計器。OCR と直列につなぐ */
+    const currKinds = meterKinds.filter((k) => METER_CIRCUIT[k].c);
+    /** VT 二次（電圧回路）だけを使う計器 */
+    const voltOnlyKinds = meterKinds.filter((k) => METER_CIRCUIT[k].v && !METER_CIRCUIT[k].c);
 
+    // 分岐点（LA・計器）
+    let tap: Element | null = null;
+    let tapY = 0;
     if (hv.la || hasMetering) {
-      const tapY = y - 5;
-      const tap = b.el('JUNCTION', TX, tapY);
+      tapY = y - 5;
+      tap = b.el('JUNCTION', TX, tapY);
       if (prev) b.wire(prev, 'S', tap, 'N');
       prev = tap;
       y += 10;
@@ -173,45 +196,75 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
         const gnd = b.el('GROUND_A', TX - 40, tapY + 35, { labels: [] });
         b.wire(la, 'S', gnd, 'N');
       }
-
-      if (hasMetering) {
-        const vx = TX + 50;
-        const ibusY = tapY + 30;
-        if (hv.metering.vt) {
-          const vt = b.el('VT', vx, tapY + 15, { labels: withModel(['VT'], hv.nameplates?.vt) });
-          b.wire(tap, 'E', vt, 'N');
-          if (meterKinds.length > 0) b.wireToPoint(vt, 'S', { x: vx, y: ibusY });
-        } else if (meterKinds.length > 0) {
-          b.wireToPoint(tap, 'E', { x: vx, y: ibusY });
-        }
-        if (meterKinds.length > 0) {
-          const xs = meterKinds.map((_, i) => TX + 80 + i * 15);
-          const xLast = xs[xs.length - 1]!;
-          b.wirePoints({ x: vx, y: ibusY }, { x: xLast, y: ibusY });
-          meterKinds.forEach((k, i) => {
-            const mx = xs[i]!;
-            const m = b.el(k, mx, tapY + 15, { labels: [] });
-            b.wireToPoint(m, 'S', { x: mx, y: ibusY });
-            if (i < meterKinds.length - 1) b.el('JUNCTION', mx, ibusY);
-          });
-        }
-      }
     }
+
+    /**
+     * OCR と計器。
+     * 電流計・電力計・力率計・電力量計の電流コイルは CT 二次（5A 回路）に直列に入るので、
+     * CT → OCR → 各計器 と横一列につなぐ。電圧コイルは VT 二次から下の電圧回路で取る。
+     */
+    const drawMetering = (ct: Element | null, ocr: boolean): void => {
+      const mY = ct ? ct.y : tapY + 15;
+      let last: { el: Element; port: string } | null = ct ? { el: ct, port: 'E' } : null;
+      if (ct && ocr) {
+        const o = b.el('OCR', TX + 30, mY, { labels: [] });
+        b.wire(ct, 'E', o, 'W');
+        last = { el: o, port: 'E' };
+      }
+      if (!tap || !hasMetering) return;
+
+      let x = TX + 55;
+      /** 電圧回路につなぐ計器を左から順に */
+      const voltEls: Element[] = [];
+      currKinds.forEach((k) => {
+        const m = b.el(k, x, mY, { labels: [] });
+        if (last) b.wire(last.el, last.port, m, 'W');
+        last = { el: m, port: 'E' };
+        if (METER_CIRCUIT[k].v) voltEls.push(m);
+        x += MP;
+      });
+      if (currKinds.length > 0) b.text(TX + 52, mY + 7, 'CT二次', TEXT.rating, 'end');
+      voltOnlyKinds.forEach((k) => {
+        voltEls.push(b.el(k, x, mY, { labels: [] }));
+        x += MP;
+      });
+
+      // 計器用変圧器と電圧回路
+      const vx = x + 10;
+      const vbusY = mY + 15;
+      const vt = hv.metering.vt ? b.el('VT', vx, mY, { labels: withModel(['VT'], hv.nameplates?.vt) }) : null;
+      if (vt) b.wire(tap, 'E', vt, 'N');
+      if (voltEls.length > 0) {
+        if (vt) b.wireToPoint(vt, 'S', { x: vx, y: vbusY });
+        else b.wireToPoint(tap, 'E', { x: vx, y: vbusY });
+        const left = voltEls[0]!.x;
+        b.wirePoints({ x: vx, y: vbusY }, { x: left, y: vbusY });
+        voltEls.forEach((m) => {
+          b.wireToPoint(m, 'S', { x: m.x, y: vbusY });
+          if (m.x !== left) b.el('JUNCTION', m.x, vbusY);
+        });
+        b.text(vx + 10, vbusY + 1, 'VT二次', TEXT.rating, 'start');
+      }
+    };
 
     // 主遮断装置
     if (hv.mainBreaker.type === 'CB') {
       const mb = hv.mainBreaker;
       const ct = place('CT', withModel([`CT ${mb.ctRatio}`], hv.nameplates?.ct));
-      if (mb.ocr) {
-        const ocr = b.el('OCR', TX + 30, ct.y, { labels: [] });
-        b.wire(ct, 'E', ocr, 'W');
-      }
+      drawMetering(ct, mb.ocr);
       place('VCB', withModel([`VCB ${mb.vcb.ratedA}A`, `${mb.vcb.breakingKA}kA`], hv.nameplates?.vcb), {
         ratedA: mb.vcb.ratedA,
         breakingKA: mb.vcb.breakingKA,
       });
     } else {
       const mb = hv.mainBreaker;
+      if (currKinds.length > 0) {
+        // PF・S 形には保護用 CT が無い。電流回路の計器があるので計器用 CT を足す
+        drawMetering(place('CT', withModel(['CT'], hv.nameplates?.ct)), false);
+        b.warn('電流計・電力計は CT 二次から取るため、計器用 CT を追加しました（主遮断装置が PF・S 形のため）');
+      } else {
+        drawMetering(null, false);
+      }
       place('PF', withModel([`PF ${mb.pfA}A`], hv.nameplates?.pf));
       place('LBS', withModel([`LBS ${mb.lbs.ratedA}A`], hv.nameplates?.lbs), { ratedA: mb.lbs.ratedA });
     }

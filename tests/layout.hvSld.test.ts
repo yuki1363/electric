@@ -105,8 +105,69 @@ describe('高圧受電設備 単線結線図 生成', () => {
     const rs = generateHvSld(hv, p.meta, p.panels);
     const kinds = rs[0]!.diagram.elements.map((e) => e.kind);
     expect(kinds).not.toContain('VCB');
-    expect(kinds).not.toContain('CT');
+    expect(kinds).not.toContain('OCR');
     expect(kinds.filter((k) => k === 'PF').length).toBe(1 + p.hv.transformers.length + p.hv.capacitors.length);
+  });
+
+  it('PF・S 形でも電流回路の計器があれば計器用 CT を足す', () => {
+    const mainBreaker = { type: 'PF-S' as const, lbs: { ratedA: 300 }, pfA: 40 };
+    const withA = generateHvSld({ ...p.hv, mainBreaker }, p.meta, p.panels)[0]!;
+    expect(withA.diagram.elements.filter((e) => e.kind === 'CT').length).toBe(1);
+    expect(withA.warnings.some((w) => w.includes('計器用 CT'))).toBe(true);
+
+    // 電圧計だけなら CT は要らない
+    const metering = { vt: true, a: false, v: true, w: false, wh: false, pf: false };
+    const onlyV = generateHvSld({ ...p.hv, mainBreaker, metering }, p.meta, p.panels)[0]!;
+    expect(onlyV.diagram.elements.some((e) => e.kind === 'CT')).toBe(false);
+    expect(onlyV.warnings).toEqual([]);
+  });
+
+  describe('計器の結線', () => {
+    const metering = { vt: true, a: true, v: true, w: true, wh: false, pf: true };
+    const r = generateHvSld({ ...p.hv, metering }, p.meta, p.panels)[0]!;
+    const d2 = r.diagram;
+    const el = (k: string) => d2.elements.find((e) => e.kind === k)!;
+    /** 要素 a のポートから出ている配線のうち、相手が要素 b のものを探す */
+    const linked = (a: { id: string }, b: { id: string }) =>
+      d2.wires.some(
+        (w) =>
+          (isPortEnd(w.from) && w.from.elementId === a.id && isPortEnd(w.to) && w.to.elementId === b.id) ||
+          (isPortEnd(w.from) && w.from.elementId === b.id && isPortEnd(w.to) && w.to.elementId === a.id),
+      );
+
+    it('電流計は CT 二次側（OCR と直列）につながる', () => {
+      // CT → OCR → A → W → PF の直列。電圧計は電流回路に入らない
+      expect(linked(el('CT'), el('OCR'))).toBe(true);
+      expect(linked(el('OCR'), el('METER_A'))).toBe(true);
+      expect(linked(el('METER_A'), el('METER_W'))).toBe(true);
+      expect(linked(el('METER_W'), el('METER_PF'))).toBe(true);
+      expect(linked(el('METER_V'), el('METER_PF'))).toBe(false);
+    });
+
+    it('電圧計・電力計・力率計は VT 二次側の電圧回路につながる', () => {
+      const vt = el('VT');
+      const vbusY = vt.y + 15;
+      // VT から電圧回路へ下ろす
+      expect(d2.wires.some((w) => isPortEnd(w.from) && w.from.elementId === vt.id && !isPortEnd(w.to) && w.to.y === vbusY)).toBe(true);
+      // 電圧を使う計器は電圧回路へ、電流専用の電流計はつながらない
+      const toBus = (k: string) => {
+        const m = el(k);
+        return d2.wires.some((w) => isPortEnd(w.from) && w.from.elementId === m.id && !isPortEnd(w.to) && w.to.y === vbusY);
+      };
+      expect(toBus('METER_V')).toBe(true);
+      expect(toBus('METER_W')).toBe(true);
+      expect(toBus('METER_PF')).toBe(true);
+      expect(toBus('METER_A')).toBe(false);
+    });
+
+    it('電流回路の計器を増やしても母線の高さは変わらない', () => {
+      const busY = (m: typeof metering) => {
+        const g2 = generateHvSld({ ...p.hv, metering: m }, p.meta, p.panels)[0]!;
+        return g2.diagram.wires.find((w) => w.style === 'bus')!.points[0]!.y;
+      };
+      expect(busY(metering)).toBe(busY({ vt: true, a: false, v: true, w: false, wh: false, pf: false }));
+      expect(busY(metering)).toBe(busY({ ...metering, wh: true }));
+    });
   });
 
   it('A4 では自動縮尺で用紙に収まる', () => {

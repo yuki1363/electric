@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 /** blur / Enter で確定するテキスト入力（履歴を1手にまとめる） */
 export function TextField({
@@ -22,6 +22,17 @@ export function TextField({
   const commit = () => {
     if (v !== value) onCommit(v);
   };
+  // タブや画面を切り替えると blur が起きないまま外れることがあるので、
+  // アンマウント時にも未確定の入力を確定する
+  const latest = useRef({ v, value, onCommit });
+  latest.current = { v, value, onCommit };
+  useEffect(
+    () => () => {
+      const cur = latest.current;
+      if (cur.v !== cur.value) cur.onCommit(cur.v);
+    },
+    [],
+  );
   return (
     <input
       type="text"
@@ -72,6 +83,21 @@ export function NumberField({
     }
     if (n !== value) onCommit(n);
   };
+  // TextField と同じく、アンマウント時にも未確定の入力を確定する
+  const latest = useRef({ v, value, allowEmpty, onCommit });
+  latest.current = { v, value, allowEmpty, onCommit };
+  useEffect(
+    () => () => {
+      const cur = latest.current;
+      if (cur.v.trim() === '') {
+        if (cur.allowEmpty && cur.value !== undefined) cur.onCommit(undefined);
+        return;
+      }
+      const n = Number(cur.v);
+      if (Number.isFinite(n) && n !== cur.value) cur.onCommit(n);
+    },
+    [],
+  );
   return (
     <input
       type="number"

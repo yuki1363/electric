@@ -11,6 +11,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['tests/**/*.test.ts'],
+    // 入力欄のテスト (.tsx) だけ先頭の docblock で jsdom に切り替える
+    include: ['tests/**/*.test.ts', 'tests/**/*.test.tsx'],
   },
 });
