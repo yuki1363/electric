@@ -65,6 +65,7 @@ tests          単体テスト（生成器・ルータ・DXF・履歴・JSON）
 ## Cloudflare へのデプロイ
 
 Cloudflare Workers の Static Assets 機能で `dist/` を配信します（設定は `wrangler.jsonc`）。
+デプロイ先の Worker 名は **`electric`**、公開 URL は `https://electric.<サブドメイン>.workers.dev` になります。
 
 ### 手元から
 
@@ -73,14 +74,22 @@ npx wrangler login
 npm run deploy
 ```
 
+複数の Cloudflare アカウントに所属している場合は、対象アカウントを環境変数で指定します。
+
+```bash
+CLOUDFLARE_ACCOUNT_ID=<アカウント ID> npm run deploy
+```
+
 ### GitHub Actions から
 
-リポジトリの Secrets に以下を登録すると、`main` への push で自動デプロイされます（未登録の場合はスキップ）。
+リポジトリの Secrets に以下を登録すると、**既定ブランチへの push で自動デプロイ**されます（未登録の場合、デプロイ手順はスキップされビルドとテストだけが走ります）。
 
 | Secret | 内容 |
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | 「Workers スクリプトの編集」権限を持つ API トークン |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare ダッシュボードのアカウント ID |
+
+アカウント ID は公開リポジトリに残さないよう、`wrangler.jsonc` には書かず Secrets / 環境変数から渡す方針にしています。
 
 ## 制限事項
 
