@@ -1,4 +1,6 @@
-import type { CapacitorSpec, HvSpec, LvPanelSpec, TransformerSpec } from '../../model/types';
+import type { CapacitorSpec, HvSlot, HvSpec, LvPanelSpec, Nameplate, TransformerSpec } from '../../model/types';
+import { HV_SLOT_LABEL } from '../../model/types';
+import { NameplateDisclosure, NameplateFields } from './NameplateFields';
 import { newId } from '../../model/ids';
 import { useDispatch } from '../../state/context';
 import { CheckField, NumberField, Row, Section, SelectField, TextField } from '../fields';
@@ -32,6 +34,27 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
       capacitors: [...hv.capacitors, { id: newId('sc'), name: `SC-${hv.capacitors.length + 1}`, kvar: 50, sr: true, switch: 'LBS', pfA: 30 }],
     });
   const removeSc = (id: string) => set({ capacitors: hv.capacitors.filter((c) => c.id !== id) });
+
+  const setSlotNp = (slot: HvSlot, np: Nameplate) =>
+    set({ nameplates: { ...hv.nameplates, [slot]: np } });
+
+  /** 受電盤で有効になっているスロット */
+  const activeSlots = (): HvSlot[] => {
+    const out: HvSlot[] = [];
+    if (hv.pas.kind !== 'none') out.push('pas');
+    out.push('dgr', 'cable');
+    if (hv.vct) out.push('vct');
+    if (hv.ds) out.push('ds');
+    if (hv.metering.vt) out.push('vt');
+    if (hv.la) out.push('la');
+    if (hv.mainBreaker.type === 'CB') {
+      out.push('ct', 'vcb');
+      if (hv.mainBreaker.ocr) out.push('ocr');
+    } else {
+      out.push('pf', 'lbs');
+    }
+    return out;
+  };
 
   const mb = hv.mainBreaker;
 
@@ -136,6 +159,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                   <th>開閉器</th>
                   <th>PF A</th>
                   <th>給電先</th>
+                  <th>銘板</th>
                   <th></th>
                 </tr>
               </thead>
@@ -158,6 +182,13 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                         ))}
                       </select>
                     </td>
+                    <td>
+                      <NameplateDisclosure
+                        label={`変圧器 ${t.name} の銘板`}
+                        value={t.nameplate}
+                        onChange={(np) => setTr(t.id, { nameplate: np })}
+                      />
+                    </td>
                     <td><button onClick={() => removeTr(t.id)}>削除</button></td>
                   </tr>
                 ))}
@@ -174,6 +205,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                   <th>直列リアクトル</th>
                   <th>開閉器</th>
                   <th>PF A</th>
+                  <th>銘板</th>
                   <th></th>
                 </tr>
               </thead>
@@ -185,11 +217,30 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                     <td><CheckField checked={c.sr} onChange={(v) => setSc(c.id, { sr: v })} label="SR 6%" /></td>
                     <td><SelectField value={c.switch} options={[{ value: 'LBS', label: 'LBS+PF' }, { value: 'PC', label: 'PC' }]} onChange={(v) => setSc(c.id, { switch: v })} /></td>
                     <td><NumberField value={c.pfA} onCommit={(v) => setSc(c.id, { pfA: v ?? 30 })} width={60} /></td>
+                    <td>
+                      <NameplateDisclosure
+                        label={`進相コンデンサ ${c.name} の銘板`}
+                        value={c.nameplate}
+                        onChange={(np) => setSc(c.id, { nameplate: np })}
+                      />
+                    </td>
                     <td><button onClick={() => removeSc(c.id)}>削除</button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </Section>
+          <Section title="受電盤 機器銘板">
+            <p className="muted">
+              型式・製造者・製造年月・製造番号を入力できます。定格容量を空にすると、上で入力した仕様から自動で埋まります。
+              入力した内容は「機器銘板表」の図面に出ます。
+            </p>
+            {activeSlots().map((slot) => (
+              <div key={slot} className="slot-nameplate">
+                <div className="slot-title">{HV_SLOT_LABEL[slot]}</div>
+                <NameplateFields value={hv.nameplates?.[slot]} onChange={(np) => setSlotNp(slot, np)} />
+              </div>
+            ))}
           </Section>
         </>
       )}

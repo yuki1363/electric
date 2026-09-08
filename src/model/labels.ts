@@ -30,4 +30,5 @@ export const KIND_TITLE = {
   'lv-sld': '分電盤 単線結線図',
   'lv-face': '盤面配置図',
   'lv-schedule': '回路表',
+  nameplate: '機器銘板表',
 } as const;

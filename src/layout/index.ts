@@ -3,6 +3,7 @@ import { generateHvSld } from './hvSld';
 import { generateLvSld } from './lvSld';
 import { generateLvFace } from './lvFace';
 import { generateLvSchedule } from './lvSchedule';
+import { generateNameplate } from './nameplate';
 import { fitDiagram, isTight, scaleLabel } from './fit';
 import type { GenResult } from './types';
 
@@ -38,6 +39,7 @@ export function regenerateAll(project: Project): RegenerateResult {
     raw.push(generateLvFace(panel, project.meta));
     raw.push(...generateLvSchedule(panel, project.meta, project.hv.transformers));
   }
+  raw.push(...generateNameplate(project));
   const results = raw.map(fitResult);
   return {
     diagrams: results.map((r) => r.diagram),

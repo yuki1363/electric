@@ -1,6 +1,6 @@
 import type { ProjectMeta } from '../../model/types';
 import { useDispatch } from '../../state/context';
-import { Row, Section, SelectField, TextField } from '../fields';
+import { CheckField, Row, Section, SelectField, TextField } from '../fields';
 
 export function ProjectMetaForm({ meta }: { meta: ProjectMeta }) {
   const dispatch = useDispatch();
@@ -21,6 +21,13 @@ export function ProjectMetaForm({ meta }: { meta: ProjectMeta }) {
       </Row>
       <Row label="会社名">
         <TextField value={meta.company ?? ''} onCommit={(v) => set({ company: v })} width={260} />
+      </Row>
+      <Row label="図面の表示">
+        <CheckField
+          checked={meta.showModels ?? false}
+          onChange={(v) => set({ showModels: v })}
+          label="機器ラベルに型式を併記する"
+        />
       </Row>
       <Row label="用紙">
         <SelectField

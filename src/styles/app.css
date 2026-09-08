@@ -114,3 +114,12 @@ input[type=text], input[type=number], input[type=date], select { font: inherit; 
 .export { max-width: 800px; overflow: auto; }
 .export-list { list-style: none; padding: 0; margin: 6px 0; }
 .export-list li { padding: 2px 0; }
+
+/* 銘板入力 */
+.nameplate-fields { display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.nameplate-fields label { display: inline-flex; align-items: center; gap: 4px; }
+.nameplate-fields label span { color: #555; font-size: 11px; }
+.nameplate-disclosure { position: relative; }
+.nameplate-body { position: absolute; z-index: 5; right: 0; top: 100%; background: #fff; border: 1px solid var(--accent); border-radius: 4px; padding: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.15); width: 560px; }
+.slot-nameplate { padding: 5px 0; border-bottom: 1px dotted var(--border); }
+.slot-title { font-weight: 600; color: #444; margin-bottom: 3px; }

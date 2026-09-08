@@ -81,6 +81,7 @@ function buildPage(panel: LvPanelSpec, meta: ProjectMeta, transformers: Transfor
         `主幹 ${m.kind} ${m.poles}`,
         `${m.af}AF/${m.at}AT`,
         m.kind === 'ELB' && m.sensitivityMa ? `${m.sensitivityMa}mA` : '',
+        meta.showModels && panel.nameplate?.model ? panel.nameplate.model : '',
       ].filter(Boolean),
       props: { af: m.af, at: m.at, poles: m.poles },
     });

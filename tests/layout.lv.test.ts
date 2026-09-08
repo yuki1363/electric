@@ -184,9 +184,10 @@ describe('回路表', () => {
 });
 
 describe('regenerateAll', () => {
-  it('高圧 1 + 分電盤ごとに 3 図面', () => {
+  it('高圧 1 + 分電盤ごとに 3 図面 + 銘板表', () => {
     const r = regenerateAll(p);
-    expect(r.diagrams.length).toBe(1 + p.panels.length * 3);
+    expect(r.diagrams.length).toBe(1 + p.panels.length * 3 + 1);
+    expect(r.diagrams.filter((d) => d.kind === 'nameplate').length).toBe(1);
     expect(new Set(r.diagrams.map((d) => d.id)).size).toBe(r.diagrams.length);
     expect(r.warnings).toEqual([]);
   });

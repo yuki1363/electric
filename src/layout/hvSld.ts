@@ -15,6 +15,9 @@ const BP_MIN = 35;
 
 export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], id = 'hv-sld'): GenResult {
   const sheet = meta.sheet;
+  /** 型式表示が有効なら型式を 1 行足す */
+  const withModel = (labels: string[], np?: { model?: string }): string[] =>
+    meta.showModels && np?.model ? [...labels, np.model] : labels;
   const g = sheetGeom(sheet);
   const b = new DiagramBuilder(id, 'hv-sld', '高圧受電設備 単線結線図', sheet);
 
@@ -36,17 +39,17 @@ export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec
 
   // 区分開閉器
   if (hv.pas.kind !== 'none') {
-    place(hv.pas.kind, [`${hv.pas.kind} ${hv.pas.ratedA}A`, hv.pas.sog ? 'SOG付' : ''], {
+    place(hv.pas.kind, withModel([`${hv.pas.kind} ${hv.pas.ratedA}A`, hv.pas.sog ? 'SOG付' : ''], hv.nameplates?.pas), {
       ratedA: hv.pas.ratedA,
       sog: hv.pas.sog,
     });
   }
 
   // ケーブルヘッド
-  place('CABLE_HEAD', [
-    `${hv.cable.type} ${hv.cable.sq}sq`,
-    hv.cable.lengthM ? `${hv.cable.lengthM}m` : '',
-  ]);
+  place(
+    'CABLE_HEAD',
+    withModel([`${hv.cable.type} ${hv.cable.sq}sq`, hv.cable.lengthM ? `${hv.cable.lengthM}m` : ''], hv.nameplates?.cable),
+  );
 
   // 取引用計器
   if (hv.vct) {
@@ -56,7 +59,7 @@ export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec
   }
 
   // 断路器
-  if (hv.ds) place('DS', ['DS']);
+  if (hv.ds) place('DS', withModel(['DS'], hv.nameplates?.ds));
 
   // 分岐点（LA・計器）
   const meterKinds: SymbolKind[] = [];
@@ -75,7 +78,7 @@ export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec
     y += 10;
 
     if (hv.la) {
-      const la = b.el('LA', TX - 40, tapY + 15, { labels: ['LA'] });
+      const la = b.el('LA', TX - 40, tapY + 15, { labels: withModel(['LA'], hv.nameplates?.la) });
       b.wire(tap, 'W', la, 'N');
       const gnd = b.el('GROUND_A', TX - 40, tapY + 35, { labels: [] });
       b.wire(la, 'S', gnd, 'N');
@@ -85,7 +88,7 @@ export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec
       const vx = TX + 50;
       const ibusY = tapY + 30;
       if (hv.metering.vt) {
-        const vt = b.el('VT', vx, tapY + 15, { labels: ['VT'] });
+        const vt = b.el('VT', vx, tapY + 15, { labels: withModel(['VT'], hv.nameplates?.vt) });
         b.wire(tap, 'E', vt, 'N');
         if (meterKinds.length > 0) b.wireToPoint(vt, 'S', { x: vx, y: ibusY });
       } else if (meterKinds.length > 0) {
@@ -108,19 +111,19 @@ export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec
   // 主遮断装置
   if (hv.mainBreaker.type === 'CB') {
     const mb = hv.mainBreaker;
-    const ct = place('CT', [`CT ${mb.ctRatio}`]);
+    const ct = place('CT', withModel([`CT ${mb.ctRatio}`], hv.nameplates?.ct));
     if (mb.ocr) {
       const ocr = b.el('OCR', TX + 30, ct.y, { labels: [] });
       b.wire(ct, 'E', ocr, 'W');
     }
-    place('VCB', [`VCB ${mb.vcb.ratedA}A`, `${mb.vcb.breakingKA}kA`], {
+    place('VCB', withModel([`VCB ${mb.vcb.ratedA}A`, `${mb.vcb.breakingKA}kA`], hv.nameplates?.vcb), {
       ratedA: mb.vcb.ratedA,
       breakingKA: mb.vcb.breakingKA,
     });
   } else {
     const mb = hv.mainBreaker;
-    place('PF', [`PF ${mb.pfA}A`]);
-    place('LBS', [`LBS ${mb.lbs.ratedA}A`], { ratedA: mb.lbs.ratedA });
+    place('PF', withModel([`PF ${mb.pfA}A`], hv.nameplates?.pf));
+    place('LBS', withModel([`LBS ${mb.lbs.ratedA}A`], hv.nameplates?.lbs), { ratedA: mb.lbs.ratedA });
   }
 
   // 高圧母線
@@ -165,7 +168,7 @@ export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec
     if (item.kind === 'tr') {
       const t = item.spec;
       const tr = b.el(t.phase === '1φ' ? 'TR_1PH' : 'TR_3PH', bx, yy + 20, {
-        labels: [t.name, `${t.phase} ${t.kva}kVA`, `6.6kV/${t.secondary}`],
+        labels: withModel([t.name, `${t.phase} ${t.kva}kVA`, `6.6kV/${t.secondary}`], t.nameplate),
         props: { kva: t.kva, phase: t.phase, secondary: t.secondary },
       });
       b.wire(last, 'S', tr, 'N');
@@ -192,7 +195,7 @@ export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec
         yy += 20;
       }
       const sc = b.el('SC', bx, yy + 20, {
-        labels: [c.name, `${c.kvar}kvar`],
+        labels: withModel([c.name, `${c.kvar}kvar`], c.nameplate),
         props: { kvar: c.kvar, sr: c.sr },
       });
       b.wire(last, 'S', sc, 'N');
