@@ -29,6 +29,43 @@ describe('プロジェクト JSON', () => {
     expect(back).toEqual(p);
   });
 
+  it('旧形式の開閉装置を読み込むと機器の配列になる', () => {
+    const p = sampleProject();
+    const raw = JSON.parse(serialize(p));
+    // 前の版の書き方に戻す
+    raw.hv.mainBreaker = { type: 'CB', vcb: { ratedA: 600, breakingKA: 12.5 }, ocr: true, ctRatio: '75/5A' };
+    raw.hv.transformers[0].devices = undefined;
+    raw.hv.transformers[0].switch = 'LBS';
+    raw.hv.capacitors[0].devices = undefined;
+    raw.hv.capacitors[0].switch = 'LBS+VCS';
+    raw.hv.feeders = [{ id: 'f1', name: 'F1', breaker: 'VCB', ratedA: 600, ct: true, ocr: true }];
+
+    const back = parse(JSON.stringify(raw));
+    expect(back.hv.mainBreaker).toMatchObject({
+      devices: ['VCB'],
+      ratedA: 600,
+      breakingKA: 12.5,
+      ct: true,
+      ctRatio: '75/5A',
+      ocr: true,
+    });
+    // 旧 'LBS' は限流ヒューズ付きを指していた
+    expect(back.hv.transformers[0]!.devices).toEqual(['LBS', 'PF']);
+    expect(back.hv.capacitors[0]!.devices).toEqual(['LBS', 'PF', 'VCS']);
+    expect(back.hv.feeders[0]!.devices).toEqual(['VCB']);
+    // 旧フィールドは残さない
+    expect('switch' in back.hv.transformers[0]!).toBe(false);
+    expect('breaker' in back.hv.feeders[0]!).toBe(false);
+  });
+
+  it('旧形式の PF・S 形は LBS + PF になる', () => {
+    const p = sampleProject();
+    const raw = JSON.parse(serialize(p));
+    raw.hv.mainBreaker = { type: 'PF-S', lbs: { ratedA: 300 }, pfA: 40 };
+    const back = parse(JSON.stringify(raw));
+    expect(back.hv.mainBreaker).toMatchObject({ devices: ['LBS', 'PF'], ratedA: 300, pfA: 40, ct: false, ocr: false });
+  });
+
   it('不正な JSON は例外', () => {
     expect(() => parse('{')).toThrow();
     expect(() => parse('[]')).toThrow();

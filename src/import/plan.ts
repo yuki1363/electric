@@ -2,7 +2,7 @@ import type {
   CapacitorSpec,
   HvFeederSpec,
   HvSlot,
-  HvSwitch,
+  SwitchDevice,
   HvSpec,
   LvPanelSpec,
   Nameplate,
@@ -14,6 +14,7 @@ import type {
 import { defaultPanel } from '../model/defaults';
 import { newId } from '../model/ids';
 import { keyOf } from './normalize';
+import { deviceKey, orderDevices } from '../model/switchgear';
 import type { ParsedRow } from './nameplate';
 
 /** 銘板行から共通の銘板情報を取り出す */
@@ -48,18 +49,37 @@ const SLOT_OF_DEVICE: [string, HvSlot][] = [
   ['OCR', 'ocr'],
   ['LBS', 'lbs'],
   ['PF', 'pf'],
+  ['VCS', 'vcs'],
+  ['PC', 'pc'],
 ];
 
 /**
- * 台帳の行から開閉方式を決める。
- * VCB があれば VCB、無ければ LBS / VCS の有無で組み合わせを選ぶ。
+ * 台帳の行から開閉装置の組み合わせを決める。
+ * 見つかった機器をそのまま並べ、1 つも無ければ高圧カットアウトとみなす。
  */
-function switchOf(rows: { vcb?: ParsedRow; lbs?: ParsedRow; vcs?: ParsedRow }): HvSwitch {
-  if (rows.vcb) return 'VCB';
-  if (rows.lbs && rows.vcs) return 'LBS+VCS';
-  if (rows.vcs) return 'VCS';
-  if (rows.lbs) return 'LBS';
-  return 'PC';
+function switchOf(rows: Partial<Record<Lowercase<SwitchDevice>, ParsedRow | undefined>>): SwitchDevice[] {
+  const out: SwitchDevice[] = [];
+  if (rows.lbs) out.push('LBS');
+  if (rows.vcb) out.push('VCB');
+  if (rows.pc) out.push('PC');
+  if (rows.pf || rows.lbs) out.push('PF'); // LBS は限流ヒューズ付きが通例
+  if (rows.vcs) out.push('VCS');
+  return orderDevices(out.length > 0 ? out : ['PC']);
+}
+
+/** 選ばれた開閉装置と直列リアクトルの銘板を、機器名の小文字キーでまとめる */
+function deviceNameplates(
+  devices: SwitchDevice[],
+  rows: Partial<Record<Lowercase<SwitchDevice>, ParsedRow | undefined>>,
+  sr?: ParsedRow,
+): Record<string, Nameplate> {
+  const out: Record<string, Nameplate> = {};
+  for (const dev of devices) {
+    const r = rows[deviceKey(dev) as Lowercase<SwitchDevice>];
+    if (r) out[deviceKey(dev)] = toNameplate(r);
+  }
+  if (sr) out.sr = toNameplate(sr);
+  return out;
 }
 
 function slotOf(deviceName: string): HvSlot | undefined {
@@ -173,12 +193,18 @@ export function buildImportPlan(rows: ParsedRow[]): ImportPlan {
       const vcb = gRows.find((r) => isDevice(r, 'VCB'));
       const ct = gRows.find((r) => isDevice(r, 'CT'));
       const ocr = gRows.find((r) => isDevice(r, 'OCR'));
-      if (vcb) {
+      const mainLbs = gRows.find((r) => isDevice(r, 'LBS'));
+      const mainPf = gRows.find((r) => isDevice(r, 'PF'));
+      if (vcb || mainLbs) {
+        const main = vcb ?? mainLbs!;
         plan.hvPatch.mainBreaker = {
-          type: 'CB',
-          vcb: { ratedA: vcb.rating.a ?? 600, breakingKA: vcb.rating.ka ?? 12.5 },
+          devices: switchOf({ vcb, lbs: mainLbs, pf: mainPf }),
+          ratedA: main.rating.a ?? 600,
+          ...(vcb?.rating.ka ? { breakingKA: vcb.rating.ka } : {}),
+          ...(mainPf?.rating.a ? { pfA: mainPf.rating.a } : {}),
+          ct: !!ct,
+          ...(ct?.rating.ratio ? { ctRatio: ct.rating.ratio } : {}),
           ocr: !!ocr,
-          ctRatio: ct?.rating.ratio ?? '75/5A',
         };
       }
       const vt = gRows.find((r) => isDevice(r, 'VT'));
@@ -190,6 +216,7 @@ export function buildImportPlan(rows: ParsedRow[]): ImportPlan {
       const vcb = gRows.find((r) => isDevice(r, 'VCB'));
       const lbs = gRows.find((r) => isDevice(r, 'LBS'));
       const vcs = gRows.find((r) => isDevice(r, 'VCS'));
+      const pc = gRows.find((r) => isDevice(r, 'PC'));
       const pf = gRows.find((r) => isDevice(r, 'PF'));
       const ct = gRows.find((r) => isDevice(r, 'CT'));
       const ocr = gRows.find((r) => isDevice(r, 'OCR'));
@@ -198,18 +225,19 @@ export function buildImportPlan(rows: ParsedRow[]): ImportPlan {
       if (vcb) nameplates.vcb = toNameplate(vcb);
       if (lbs) nameplates.lbs = toNameplate(lbs);
       if (vcs) nameplates.vcs = toNameplate(vcs);
+      if (pc) nameplates.pc = toNameplate(pc);
       if (pf) nameplates.pf = toNameplate(pf);
       if (ct) nameplates.ct = toNameplate(ct);
       if (ocr) nameplates.ocr = toNameplate(ocr);
       if (cable) nameplates.cable = toNameplate(cable);
-      for (const r of [vcb, lbs, vcs, pf, ct, ocr, cable]) if (r) use(r);
+      for (const r of [vcb, lbs, vcs, pc, pf, ct, ocr, cable]) if (r) use(r);
 
       const sq = cable ? (cable.note.match(/(\d+(?:\.\d+)?)\s*sq/i) ?? [])[1] : undefined;
       plan.feeders.push({
         id: newId('fdr'),
         name,
-        breaker: vcb || lbs || vcs ? switchOf({ vcb, lbs, vcs }) : 'LBS',
-        ratedA: (vcb ?? lbs ?? vcs)?.rating.a ?? 600,
+        devices: switchOf({ vcb, lbs, vcs, pc, pf }),
+        ratedA: (vcb ?? lbs ?? vcs ?? pc)?.rating.a ?? 600,
         ...(vcb?.rating.ka ? { breakingKA: vcb.rating.ka } : {}),
         ...(!vcb && pf?.rating.a ? { pfA: pf.rating.a } : {}),
         ct: !!ct,
@@ -226,16 +254,20 @@ export function buildImportPlan(rows: ParsedRow[]): ImportPlan {
       const sr = gRows.find((r) => isDevice(r, 'SR'));
       const lbs = gRows.find((r) => isDevice(r, 'LBS'));
       const vcs = gRows.find((r) => isDevice(r, 'VCS'));
+      const pc = gRows.find((r) => isDevice(r, 'PC'));
       const pf = gRows.find((r) => isDevice(r, 'PF'));
-      if (sc) use(sc);
+      const devices = switchOf({ lbs, vcs, pc, pf });
+      const nameplates = deviceNameplates(devices, { lbs, vcs, pc, pf }, sr);
+      for (const r of [sc, lbs, vcs, pc, pf, sr]) if (r) use(r);
       plan.capacitors.push({
         id: newId('sc'),
         name,
         kvar: sc?.rating.kvar ?? 50,
         sr: !!sr,
-        switch: switchOf({ lbs, vcs }),
+        devices,
         pfA: pf?.rating.a ?? 30,
         ...(sc ? { nameplate: toNameplate(sc) } : {}),
+        ...(Object.keys(nameplates).length > 0 ? { nameplates } : {}),
       });
       continue;
     }
@@ -245,7 +277,11 @@ export function buildImportPlan(rows: ParsedRow[]): ImportPlan {
       const trs = gRows.filter((r) => isDevice(r, 'Tr', '変圧器', 'T'));
       const lbs = gRows.find((r) => isDevice(r, 'LBS'));
       const vcs = gRows.find((r) => isDevice(r, 'VCS'));
+      const pc = gRows.find((r) => isDevice(r, 'PC'));
       const pf = gRows.find((r) => isDevice(r, 'PF'));
+      const devices = switchOf({ lbs, vcs, pc, pf });
+      const nameplates = deviceNameplates(devices, { lbs, vcs, pc, pf });
+      for (const r of [lbs, vcs, pc, pf]) if (r) use(r);
       const panelId = newId('panel');
       let linked = false;
       for (const r of trs) {
@@ -257,10 +293,12 @@ export function buildImportPlan(rows: ParsedRow[]): ImportPlan {
           phase: phaseOf(r.ratingText),
           kva: r.rating.kva ?? 0,
           secondary: secondary ?? '210V',
-          switch: switchOf({ lbs, vcs }),
+          devices,
           pfA: pf?.rating.a ?? 30,
           ...(linked ? {} : { feeds: panelId }),
           nameplate: toNameplate(r),
+          // 高圧側の開閉器は 1 グループに 1 台ぶんしか無いので先頭の変圧器に付ける
+          ...(!linked && Object.keys(nameplates).length > 0 ? { nameplates } : {}),
         });
         linked = true;
       }

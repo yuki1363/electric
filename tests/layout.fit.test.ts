@@ -15,7 +15,7 @@ const tr = (i: number, feederId?: string): TransformerSpec => ({
   phase: i % 2 === 0 ? '3φ' : '1φ',
   kva: 100,
   secondary: '210V',
-  switch: 'LBS',
+  devices: ["LBS", "PF"],
   pfA: 30,
   ...(feederId ? { feederId } : {}),
 });
@@ -29,7 +29,7 @@ function hvFlat(n: number): HvSpec {
 function hvOneFeeder(n: number): HvSpec {
   return {
     ...base.hv,
-    feeders: [{ id: 'f1', name: '分岐盤', breaker: 'VCB', ratedA: 600, ct: true, ocr: true }],
+    feeders: [{ id: 'f1', name: '分岐盤', devices: ["VCB"], ratedA: 600, ct: true, ocr: true }],
     transformers: Array.from({ length: n }, (_, i) => tr(i + 1, 'f1')),
     capacitors: [],
   };

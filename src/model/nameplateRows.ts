@@ -1,5 +1,6 @@
 import type { HvSlot, Nameplate, Project } from './types';
-import { switchDevices } from './switchgear';
+import { deviceKey, deviceLabel, orderDevices } from './switchgear';
+import type { SwitchDevice } from './switchgear';
 
 /** 銘板表 1 行分。すべて表示用の文字列に落としてある */
 export interface NameplateRow {
@@ -13,6 +14,12 @@ export interface NameplateRow {
   location: string;
   /** 備考（所属盤・系統） */
   note: string;
+}
+
+/** 開閉装置の定格表記。図面ラベルと同じ内容を 6.6kV 系の表記にする */
+function ratingOf(dev: SwitchDevice, o: { ratedA?: number; breakingKA?: number; pfA?: number }): string {
+  const label = deviceLabel(dev, o).join(' ').replace(new RegExp(`^${dev}\\s*`), '');
+  return label ? `7.2kV ${label}` : '';
 }
 
 function row(deviceName: string, np: Nameplate | undefined, fallbackRating: string, group: string): NameplateRow {
@@ -58,28 +65,17 @@ export function nameplateRows(project: Project): NameplateRow[] {
     if (hv.la) out.push(row('LA', np('la'), '', '高圧受電盤'));
     if (hv.metering.vt) out.push(row('VT', np('vt'), '6600/110V', '高圧受電盤'));
 
-    if (hv.mainBreaker.type === 'CB') {
-      const mb = hv.mainBreaker;
-      out.push(row('CT', np('ct'), mb.ctRatio, '高圧受電盤'));
-      out.push(row('VCB', np('vcb'), `7.2kV ${mb.vcb.ratedA}A ${mb.vcb.breakingKA}kA`, '高圧受電盤'));
-      if (mb.ocr) out.push(row('OCR', np('ocr'), '', '高圧受電盤'));
-    } else {
-      const mb = hv.mainBreaker;
-      out.push(row('PF', np('pf'), `7.2kV ${mb.pfA}A`, '高圧受電盤'));
-      out.push(row('LBS', np('lbs'), `7.2kV ${mb.lbs.ratedA}A`, '高圧受電盤'));
+    const mb = hv.mainBreaker;
+    if (mb.ct) out.push(row('CT', np('ct'), mb.ctRatio ?? '', '高圧受電盤'));
+    if (mb.ocr) out.push(row('OCR', np('ocr'), '', '高圧受電盤'));
+    for (const dev of orderDevices(mb.devices)) {
+      out.push(row(dev, np(deviceKey(dev) as HvSlot), ratingOf(dev, mb), '高圧受電盤'));
     }
 
     for (const f of hv.feeders) {
       const fnp = (k: string) => f.nameplates?.[k];
-      for (const dev of switchDevices(f.breaker)) {
-        if (dev === 'PF' || dev === 'PC') {
-          if (dev === 'PF' && !f.pfA) continue;
-          out.push(row(dev, fnp(dev.toLowerCase()), `7.2kV ${f.pfA ?? f.ratedA}A`, f.name));
-        } else if (dev === 'VCB') {
-          out.push(row('VCB', fnp('vcb'), `7.2kV ${f.ratedA}A${f.breakingKA ? ` ${f.breakingKA}kA` : ''}`, f.name));
-        } else {
-          out.push(row(dev, fnp(dev.toLowerCase()), `7.2kV ${f.ratedA}A`, f.name));
-        }
+      for (const dev of orderDevices(f.devices)) {
+        out.push(row(dev, fnp(deviceKey(dev)), ratingOf(dev, f), f.name));
       }
       if (f.ct) out.push(row('CT', fnp('ct'), f.ctRatio ?? '', f.name));
       if (f.ocr) out.push(row('OCR', fnp('ocr'), '', f.name));
@@ -96,9 +92,16 @@ export function nameplateRows(project: Project): NameplateRow[] {
     }
 
     for (const t of hv.transformers) {
+      for (const dev of orderDevices(t.devices)) {
+        out.push(row(dev, t.nameplates?.[deviceKey(dev)], ratingOf(dev, t), t.name));
+      }
       out.push(row('Tr', t.nameplate, `${t.phase} ${t.kva}kVA 6600/${t.secondary}`, t.name));
     }
     for (const c of hv.capacitors) {
+      for (const dev of orderDevices(c.devices)) {
+        out.push(row(dev, c.nameplates?.[deviceKey(dev)], ratingOf(dev, c), c.name));
+      }
+      if (c.sr) out.push(row('SR', c.nameplates?.sr, '6%', c.name));
       out.push(row('SC', c.nameplate, `${c.kvar}kvar 6600V`, c.name));
     }
   }

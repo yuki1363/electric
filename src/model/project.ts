@@ -3,6 +3,7 @@ import { isPortEnd } from './types';
 import { getSymbol, isSymbolKind } from '../symbols';
 import { safeFileName } from '../export/download';
 import { defaultHv, defaultMeta, defaultPanel } from './defaults';
+import { migrateDevices } from './switchgear';
 
 export const FILE_EXT = '.elec.json';
 
@@ -54,6 +55,52 @@ function validateDiagram(d: unknown, idx: number): Diagram {
   return d as unknown as Diagram;
 }
 
+/**
+ * 旧形式の開閉装置を移行する。
+ * 以前は変圧器/コンデンサが `switch: 'LBS'`、分岐盤が `breaker: 'VCB'` のような
+ * 固定パターンの文字列で、主遮断装置は CB 形 / PF・S 形の 2 択だった。
+ */
+function migrateHv(rawHv: Record<string, unknown>): Record<string, unknown> {
+  const withDevices = (v: unknown, legacyKey: 'switch' | 'breaker') => {
+    if (!isObj(v)) return v;
+    const { [legacyKey]: legacy, ...rest } = v;
+    return { ...rest, devices: migrateDevices(v.devices ?? legacy) };
+  };
+  const list = (v: unknown, legacyKey: 'switch' | 'breaker') =>
+    Array.isArray(v) ? v.map((x) => withDevices(x, legacyKey)) : [];
+
+  const out: Record<string, unknown> = {
+    ...rawHv,
+    feeders: list(rawHv.feeders, 'breaker'),
+    transformers: list(rawHv.transformers, 'switch'),
+    capacitors: list(rawHv.capacitors, 'switch'),
+  };
+
+  const mb = rawHv.mainBreaker;
+  if (isObj(mb) && !Array.isArray(mb.devices)) {
+    const vcb = isObj(mb.vcb) ? mb.vcb : {};
+    const lbs = isObj(mb.lbs) ? mb.lbs : {};
+    out.mainBreaker =
+      mb.type === 'PF-S'
+        ? {
+            devices: ['LBS', 'PF'],
+            ratedA: typeof lbs.ratedA === 'number' ? lbs.ratedA : 300,
+            pfA: typeof mb.pfA === 'number' ? mb.pfA : 40,
+            ct: false,
+            ocr: false,
+          }
+        : {
+            devices: ['VCB'],
+            ratedA: typeof vcb.ratedA === 'number' ? vcb.ratedA : 600,
+            breakingKA: typeof vcb.breakingKA === 'number' ? vcb.breakingKA : 12.5,
+            ct: true,
+            ctRatio: typeof mb.ctRatio === 'string' ? mb.ctRatio : '75/5A',
+            ocr: mb.ocr !== false,
+          };
+  }
+  return out;
+}
+
 /** JSON 文字列からプロジェクトを復元（検証・移行つき） */
 export function parse(text: string): Project {
   let raw: unknown;
@@ -71,12 +118,7 @@ export function parse(text: string): Project {
 
   // 欠けたフィールドは既定値で補完
   const meta = { ...defaultMeta(), ...raw.meta } as Project['meta'];
-  const rawHv = raw.hv as Record<string, unknown>;
-  const hv = {
-    ...defaultHv(),
-    ...rawHv,
-    feeders: Array.isArray(rawHv.feeders) ? rawHv.feeders : [],
-  } as Project['hv'];
+  const hv = { ...defaultHv(), ...migrateHv(raw.hv as Record<string, unknown>) } as Project['hv'];
   const panels = raw.panels.map((p, i) => {
     if (!isObj(p) || typeof p.id !== 'string') throw new ParseError(`panels[${i}] が不正です`);
     const base = defaultPanel(p.id, typeof p.name === 'string' ? p.name : `L-${i + 1}`);

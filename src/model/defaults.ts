@@ -15,7 +15,7 @@ export function defaultHv(): HvSpec {
     cable: { type: 'CVT', sq: 38, lengthM: 30 },
     vct: true,
     ds: true,
-    mainBreaker: { type: 'CB', vcb: { ratedA: 600, breakingKA: 12.5 }, ocr: true, ctRatio: '75/5A' },
+    mainBreaker: { devices: ['VCB'], ratedA: 600, breakingKA: 12.5, ct: true, ctRatio: '75/5A', ocr: true },
     la: true,
     metering: { vt: true, a: true, v: true, w: true, wh: false, pf: false },
     feeders: [],
@@ -90,10 +90,10 @@ export function sampleProject(): Project {
   const hv: HvSpec = {
     ...defaultHv(),
     transformers: [
-      { id: 'tr_1', name: 'Tr-1', phase: '1φ', kva: 100, secondary: '105-210V', switch: 'LBS', pfA: 30, feeds: 'panel_L1' },
-      { id: 'tr_2', name: 'Tr-2', phase: '3φ', kva: 150, secondary: '210V', switch: 'LBS', pfA: 40, feeds: 'panel_P1' },
+      { id: 'tr_1', name: 'Tr-1', phase: '1φ', kva: 100, secondary: '105-210V', devices: ['LBS', 'PF'], pfA: 30, feeds: 'panel_L1' },
+      { id: 'tr_2', name: 'Tr-2', phase: '3φ', kva: 150, secondary: '210V', devices: ['LBS', 'PF'], pfA: 40, feeds: 'panel_P1' },
     ],
-    capacitors: [{ id: 'sc_1', name: 'SC-1', kvar: 50, sr: true, switch: 'LBS', pfA: 30 }],
+    capacitors: [{ id: 'sc_1', name: 'SC-1', kvar: 50, sr: true, devices: ['LBS', 'PF'], pfA: 30 }],
   };
 
   const l1: LvPanelSpec = {

@@ -60,7 +60,9 @@ export type HvSlot =
   | 'ct'
   | 'ocr'
   | 'lbs'
-  | 'pf';
+  | 'pf'
+  | 'vcs'
+  | 'pc';
 
 export const HV_SLOT_LABEL: Record<HvSlot, string> = {
   pas: '区分開閉器 (PAS/UGS)',
@@ -75,6 +77,8 @@ export const HV_SLOT_LABEL: Record<HvSlot, string> = {
   ocr: '過電流継電器 (OCR)',
   lbs: '負荷開閉器 (LBS)',
   pf: '限流ヒューズ (PF)',
+  vcs: '真空電磁接触器 (VCS)',
+  pc: '高圧カットアウト (PC)',
 };
 
 /** 図面上の機器に紐付かない銘板（制御補機など）。銘板表にのみ出す */
@@ -91,8 +95,8 @@ export interface NameplateEntry extends Nameplate {
 export type TrPhase = '1φ' | '3φ';
 /** 二次電圧の表記。よく使う値は候補として出すが、440V など任意の値も入れられる */
 export type TrSecondary = string;
-export type { HvSwitch } from './switchgear';
-import type { HvSwitch } from './switchgear';
+export type { SwitchDevice } from './switchgear';
+import type { SwitchDevice } from './switchgear';
 
 export interface TransformerSpec {
   id: Id;
@@ -101,14 +105,18 @@ export interface TransformerSpec {
   phase: TrPhase;
   kva: number;
   secondary: TrSecondary;
-  switch: HvSwitch;
+  /** 高圧側の開閉装置。空なら開閉器なし（母線・分岐盤に直結） */
+  devices: SwitchDevice[];
   /** 限流ヒューズ定格 A */
   pfA: number;
   /** 給電先分電盤 id */
   feeds?: Id;
   /** 所属する高圧分岐盤 id。未指定なら高圧母線に直結 */
   feederId?: Id;
+  /** 変圧器本体の銘板 */
   nameplate?: Nameplate;
+  /** 開閉装置ごとの銘板。キーは機器名の小文字（lbs / pf / vcs / vcb / pc） */
+  nameplates?: Record<string, Nameplate>;
 }
 
 export interface CapacitorSpec {
@@ -117,19 +125,24 @@ export interface CapacitorSpec {
   kvar: number;
   /** 直列リアクトル（6%）付き */
   sr: boolean;
-  switch: HvSwitch;
+  /** 高圧側の開閉装置。空なら開閉器なし */
+  devices: SwitchDevice[];
   pfA: number;
   /** 所属する高圧分岐盤 id。未指定なら高圧母線に直結 */
   feederId?: Id;
+  /** 進相コンデンサ本体の銘板 */
   nameplate?: Nameplate;
+  /** 開閉装置と直列リアクトル（sr）の銘板 */
+  nameplates?: Record<string, Nameplate>;
 }
 
-/** 高圧分岐盤（母線から分岐する VCB / LBS 付きのフィーダー） */
+/** 高圧分岐盤（母線から分岐するフィーダー） */
 export interface HvFeederSpec {
   id: Id;
   /** 例: 高圧分岐盤No.1 F1 */
   name: string;
-  breaker: HvSwitch;
+  /** 遮断・開閉装置。空なら開閉器なし */
+  devices: SwitchDevice[];
   ratedA: number;
   /** VCB の遮断容量 kA */
   breakingKA?: number;
@@ -146,9 +159,20 @@ export interface HvFeederSpec {
   nameplates?: Record<string, Nameplate>;
 }
 
-export type HvMainBreaker =
-  | { type: 'CB'; vcb: { ratedA: number; breakingKA: number }; ocr: boolean; ctRatio: string }
-  | { type: 'PF-S'; lbs: { ratedA: number }; pfA: number };
+/** 受電盤の主遮断装置。高圧分岐盤と同じ形にそろえてある */
+export interface HvMainBreaker {
+  /** 空なら主遮断装置なし */
+  devices: SwitchDevice[];
+  ratedA: number;
+  /** VCB の遮断容量 kA */
+  breakingKA?: number;
+  /** 限流ヒューズ定格 A */
+  pfA?: number;
+  ct: boolean;
+  /** 例: 75/5A */
+  ctRatio?: string;
+  ocr: boolean;
+}
 
 export interface HvSpec {
   enabled: boolean;

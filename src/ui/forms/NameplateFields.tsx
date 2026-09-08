@@ -63,3 +63,35 @@ export function NameplateDisclosure({
     </div>
   );
 }
+
+/** 銘板の入力先が 1 つ分 */
+export interface NameplateItem {
+  key: string;
+  label: string;
+  value: Nameplate | undefined;
+  onChange: (next: Nameplate) => void;
+}
+
+/** 「銘板…」ボタンで開き、機器ごとの銘板入力欄を縦に並べる */
+export function NameplateGroup({ title, items }: { title: string; items: NameplateItem[] }) {
+  const [open, setOpen] = useState(false);
+  const filled = items.some((i) => i.value && Object.values(i.value).some((v) => v));
+  return (
+    <div className="nameplate-disclosure">
+      <button className="small" onClick={() => setOpen(!open)} title="型式・製造者などを入力">
+        {open ? '▼' : '▶'} 銘板{filled ? ' ●' : ''}
+      </button>
+      {open && (
+        <div className="nameplate-body">
+          <div className="muted">{title}</div>
+          {items.map((i) => (
+            <div key={i.key} className="slot-nameplate">
+              <div className="slot-title">{i.label}</div>
+              <NameplateFields value={i.value} onChange={i.onChange} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -156,10 +156,12 @@ describe('取り込み計画', () => {
 
   it('受電盤の機器を仕様へ反映する', () => {
     expect(plan.hvPatch.mainBreaker).toMatchObject({
-      type: 'CB',
-      vcb: { ratedA: 600, breakingKA: 12.5 },
-      ocr: true,
+      devices: ['VCB'],
+      ratedA: 600,
+      breakingKA: 12.5,
+      ct: true,
       ctRatio: '400/5A',
+      ocr: true,
     });
     expect(plan.hvSlots.vcb?.model).toBe('HA12AX-A1');
     expect(plan.hvSlots.ocr?.model).toBe('K2OC-AVN'); // 全角ハイフンが直っている
@@ -171,14 +173,24 @@ describe('取り込み計画', () => {
     expect(plan.feeders.length).toBe(1);
     const f = plan.feeders[0]!;
     expect(f.name).toBe('高圧分岐盤No.1 F1');
-    expect(f).toMatchObject({ breaker: 'VCB', ratedA: 600, ct: true, ctRatio: '75/5A', ocr: true });
+    expect(f).toMatchObject({ devices: ['VCB'], ratedA: 600, ct: true, ctRatio: '75/5A', ocr: true });
     expect(f.cable).toMatchObject({ type: 'CVT', sq: 38 });
   });
 
   it('コンデンサは SC / SR / 開閉器をまとめて 1 台にする', () => {
     expect(plan.capacitors.length).toBe(1);
-    // LBS + PF + VCS + SR + SC の構成は LBS+VCS として取り込む
-    expect(plan.capacitors[0]).toMatchObject({ name: 'No.1 SC', kvar: 50, sr: true, switch: 'LBS+VCS', pfA: 20 });
+    // LBS + PF + VCS + SR + SC の構成をそのまま組み合わせにする
+    expect(plan.capacitors[0]).toMatchObject({
+      name: 'No.1 SC',
+      kvar: 50,
+      sr: true,
+      devices: ['LBS', 'PF', 'VCS'],
+      pfA: 20,
+    });
+    // 開閉器と直列リアクトルの銘板は機器側に入る
+    expect(plan.capacitors[0]!.nameplates?.lbs?.model).toBe('LBS-6A/200');
+    expect(plan.capacitors[0]!.nameplates?.vcs?.model).toBe('HK-6/200');
+    expect(plan.capacitors[0]!.nameplates?.sr?.model).toBe('XTR-ASC7');
   });
 
   it('変圧器の相と二次電圧を定格から読む', () => {
@@ -199,7 +211,8 @@ describe('取り込み計画', () => {
     const names = plan.extras.map((e) => e.deviceName);
     expect(names).toContain('SC引き外し');
     expect(names).toContain('VT'); // 2 台目の VT
-    expect(names).toContain('LBS'); // コンデンサ・変圧器の高圧側開閉器
+    // 開閉器は機器の銘板欄に入るので、銘板表だけの行には残さない
+    expect(names).not.toContain('LBS');
     const vt2 = plan.extras.find((e) => e.model === 'EV-605R');
     expect(vt2).toBeDefined();
   });
@@ -215,14 +228,14 @@ describe('取り込み計画', () => {
       ['VCS', 'HK-6/200', '7.2kV200A', '富士電機', '2017', 'V1801', '2F電気室', '高圧分岐盤No.9 F9'],
     ]);
     const f = buildImportPlan(parseRows(s2, detectHeader(s2.rows)!)).feeders[0]!;
-    expect(f).toMatchObject({ breaker: 'LBS+VCS', ratedA: 200, pfA: 30 });
+    expect(f).toMatchObject({ devices: ['LBS', 'PF', 'VCS'], ratedA: 200, pfA: 30 });
     expect(f.nameplates?.vcs?.model).toBe('HK-6/200');
   });
 
   it('VCS だけの盤は VCS になる', () => {
     const s2 = sheet([['VCS', 'HK-6/200', '7.2kV200A', '富士電機', '2017', 'V1', '2F電気室', '高圧分岐盤No.9 F9']]);
     const f = buildImportPlan(parseRows(s2, detectHeader(s2.rows)!)).feeders[0]!;
-    expect(f.breaker).toBe('VCS');
+    expect(f.devices).toEqual(['VCS']);
   });
 
   it('1 行も無ければ何も作らない', () => {

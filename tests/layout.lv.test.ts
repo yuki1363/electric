@@ -189,6 +189,7 @@ describe('regenerateAll', () => {
     expect(r.diagrams.length).toBe(1 + p.panels.length * 3 + 1);
     expect(r.diagrams.filter((d) => d.kind === 'nameplate').length).toBe(1);
     expect(new Set(r.diagrams.map((d) => d.id)).size).toBe(r.diagrams.length);
-    expect(r.warnings).toEqual([]);
+    // 縮尺の案内以外の警告は出さない
+    expect(r.warnings.filter((w) => !w.includes('縮尺'))).toEqual([]);
   });
 });

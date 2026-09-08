@@ -1,9 +1,12 @@
-import type { Element, HvSpec, LvPanelSpec, ProjectMeta } from '../model/types';
-import { type SwitchDevice, switchDevices } from '../model/switchgear';
+import type { Element, HvSlot, HvSpec, LvPanelSpec, ProjectMeta } from '../model/types';
+import { deviceKey, deviceLabel, orderDevices } from '../model/switchgear';
 import type { SymbolKind as SK } from '../symbols/types';
 import { DiagramBuilder } from './builder';
+import { bboxOfPrims, emptyBBox, inflate, isEmptyBBox, union } from '../geom/bbox';
+import { elementLabelPrims, elementPrims } from '../render/flatten';
 import { GRID, TEXT, sheetGeom } from './constants';
 import { snapValue } from '../geom/point';
+import { dashedRect } from './dashRect';
 import type { GenResult } from './types';
 
 /** 幹線 x 座標 */
@@ -29,14 +32,6 @@ const METER_CIRCUIT: Record<MeterKind, { v: boolean; c: boolean }> = {
   METER_PF: { v: true, c: true },
   METER_WH: { v: true, c: true },
 };
-
-/** 分岐盤の開閉装置に添えるラベル（定格を持つのは主となる機器だけ） */
-function feederDeviceLabels(dev: SwitchDevice, f: HvSpec['feeders'][number]): string[] {
-  if (dev === 'PF') return [`PF ${f.pfA}A`];
-  if (dev === 'PC') return [`PC ${f.pfA ?? f.ratedA}A`];
-  if (dev === 'VCB') return [`VCB ${f.ratedA}A`, f.breakingKA ? `${f.breakingKA}kA` : ''].filter(Boolean);
-  return [`${dev} ${f.ratedA}A`];
-}
 
 type Leaf =
   | { kind: 'tr'; spec: HvSpec['transformers'][number] }
@@ -256,26 +251,23 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       }
     };
 
-    // 主遮断装置
-    if (hv.mainBreaker.type === 'CB') {
-      const mb = hv.mainBreaker;
-      const ct = place('CT', withModel([`CT ${mb.ctRatio}`], hv.nameplates?.ct));
+    // 変流器と主遮断装置
+    const mb = hv.mainBreaker;
+    if (mb.ct) {
+      const ct = place('CT', withModel([`CT ${mb.ctRatio ?? ''}`.trim()], hv.nameplates?.ct));
       drawMetering(ct, mb.ocr);
-      place('VCB', withModel([`VCB ${mb.vcb.ratedA}A`, `${mb.vcb.breakingKA}kA`], hv.nameplates?.vcb), {
-        ratedA: mb.vcb.ratedA,
-        breakingKA: mb.vcb.breakingKA,
-      });
+    } else if (currKinds.length > 0) {
+      // 電流計・電力計は CT 二次から取るので、保護用 CT が無ければ計器用を足す
+      drawMetering(place('CT', withModel(['CT'], hv.nameplates?.ct)), false);
+      b.warn('電流計・電力計は CT 二次から取るため、計器用 CT を追加しました（主遮断装置に CT が無いため）');
     } else {
-      const mb = hv.mainBreaker;
-      if (currKinds.length > 0) {
-        // PF・S 形には保護用 CT が無い。電流回路の計器があるので計器用 CT を足す
-        drawMetering(place('CT', withModel(['CT'], hv.nameplates?.ct)), false);
-        b.warn('電流計・電力計は CT 二次から取るため、計器用 CT を追加しました（主遮断装置が PF・S 形のため）');
-      } else {
-        drawMetering(null, false);
-      }
-      place('PF', withModel([`PF ${mb.pfA}A`], hv.nameplates?.pf));
-      place('LBS', withModel([`LBS ${mb.lbs.ratedA}A`], hv.nameplates?.lbs), { ratedA: mb.lbs.ratedA });
+      drawMetering(null, false);
+    }
+    for (const dev of orderDevices(mb.devices)) {
+      place(dev, withModel(deviceLabel(dev, mb), hv.nameplates?.[deviceKey(dev) as HvSlot]), {
+        ratedA: mb.ratedA,
+        ...(mb.breakingKA ? { breakingKA: mb.breakingKA } : {}),
+      });
     }
   }
 
@@ -303,8 +295,22 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
 
 
   const bx0 = (first ? TX : g.drawable.x1) + 20;
-  /** 分岐盤どうしの境界に足す余白 */
-  const GROUP_GAP = 10;
+  /** 分岐盤どうしの境界に足す余白（破線の囲みが接しないように） */
+  const GROUP_GAP = 18;
+
+  // 高さを揃えるため、描く前に段数を数えて基準線を決める。
+  // 機器の数が違っても副母線・変圧器・コンデンサが 1 列に並ぶようにする
+  const feederRows = (f: HvSpec['feeders'][number]) =>
+    orderDevices(f.devices).length + (f.ct ? 1 : 0) + (f.cable ? 1 : 0);
+  const leafRows = (l: Leaf) => orderDevices(l.spec.devices).length + (l.kind === 'sc' && l.spec.sr ? 1 : 0);
+  const allLeaves = groups.flatMap((g0) => (g0.kind === 'feeder' ? g0.leaves : [g0.leaf]));
+  const maxFeederRows = Math.max(0, ...groups.filter((g0) => g0.kind === 'feeder').map((g0) => feederRows(g0.feeder)));
+  const maxLeafRows = Math.max(0, ...allLeaves.map(leafRows));
+  const hasFeeder = groups.some((g0) => g0.kind === 'feeder');
+  /** 分岐盤の副母線（全盤で同じ高さ） */
+  const subY = busY + (maxFeederRows + 1) * TP + 15;
+  /** 変圧器・コンデンサを置く高さ（母線直結も分岐盤配下も同じ） */
+  const baseY = (hasFeeder ? subY : busY) + 15 + maxLeafRows * TP;
 
   // 用紙幅に応じて分岐ピッチを詰める。これで足りない分は最後に自動縮尺が受け持つ
   const totalCols = groups.reduce((n, g0) => n + columnsOf(g0), 0);
@@ -318,18 +324,16 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       ? Math.max(BP_MIN, Math.min(BP_DEFAULT, Math.floor(usableW / (totalCols - 1) / GRID) * GRID))
       : BP_DEFAULT;
 
-  /** 分岐盤の見出し（VCB/LBS + CT + OCR）を描き、副母線の y を返す */
-  const drawFeederHead = (f: HvSpec['feeders'][number], cx: number, width: number): number => {
+  /** 分岐盤の見出し（開閉装置 + CT + OCR）を描く。副母線は全盤で同じ高さ */
+  const drawFeederHead = (f: HvSpec['feeders'][number], cx: number, width: number): void => {
     const fnp = (k: string) => f.nameplates?.[k];
     let yy = busY;
     const j = b.el('JUNCTION', cx, busY);
     let last: Element = j;
 
-    for (const dev of switchDevices(f.breaker)) {
-      // 限流ヒューズは定格が入っているときだけ描く
-      if (dev === 'PF' && !f.pfA) continue;
+    for (const dev of orderDevices(f.devices)) {
       const el = b.el(dev, cx, yy + 20, {
-        labels: withModel(feederDeviceLabels(dev, f), fnp(dev.toLowerCase())),
+        labels: withModel(deviceLabel(dev, f), fnp(deviceKey(dev))),
         ...(dev === 'PF' || dev === 'PC' ? {} : { props: { ratedA: f.ratedA } }),
       });
       b.wire(last, 'S', el, 'N');
@@ -366,32 +370,34 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       yy += 20;
     }
 
-    // 盤名を見出しとして左上に置く
-    b.text(cx - 8, busY + 8, f.name, TEXT.rating, 'end');
-
     if (width > 0) {
-      const subY = yy + 15;
       b.wireToPoint(last, 'S', { x: cx, y: subY });
-      return subY;
+      return;
     }
-    // 配下が無い分岐盤は行き先を矢印で示す
-    const arrow = b.el('LOAD_ARROW', cx, yy + 20, { labels: [f.loadName || '負荷へ'] });
+    // 配下が無い分岐盤は行き先を矢印で示す。他の列の変圧器と高さをそろえる
+    const arrow = b.el('LOAD_ARROW', cx, baseY, { labels: [f.loadName || '負荷へ'] });
     b.wire(last, 'S', arrow, 'N');
-    return 0;
   };
 
-  /** 1 台ぶんの分岐（開閉器 → PF → 変圧器/コンデンサ）を描く */
+  /**
+   * 1 台ぶんの分岐（開閉装置 → 変圧器/コンデンサ）を描く。
+   * 開閉装置は基準線 baseY の直上に下詰めで並べるので、機器数が違っても本体の高さがそろう。
+   */
   const drawLeaf = (leaf: Leaf, bx: number, topY: number) => {
+    const lnp = (k: string) => leaf.spec.nameplates?.[k];
     let last: Element = b.el('JUNCTION', bx, topY);
-    let yy = topY - 5;
-    for (const dev of switchDevices(leaf.spec.switch)) {
-      const el = b.el(dev, bx, yy + 20, {
-        labels: [dev === 'PF' || dev === 'PC' ? `${dev} ${leaf.spec.pfA}A` : dev],
-      });
+    // 直列に入る機器（開閉装置 + 直列リアクトル）を基準線の直上に下詰めで積む
+    const stack: { kind: SK; labels: string[] }[] = orderDevices(leaf.spec.devices).map((dev) => ({
+      kind: dev,
+      labels: withModel(deviceLabel(dev, { pfA: leaf.spec.pfA }), lnp(deviceKey(dev))),
+    }));
+    if (leaf.kind === 'sc' && leaf.spec.sr) stack.push({ kind: 'SR', labels: withModel(['SR 6%'], lnp('sr')) });
+    stack.forEach((item, i) => {
+      const el = b.el(item.kind, bx, baseY - (stack.length - i) * TP, { labels: item.labels });
       b.wire(last, 'S', el, 'N');
       last = el;
-      yy += 20;
-    }
+    });
+    let yy = baseY - TP;
 
     if (leaf.kind === 'tr') {
       const t = leaf.spec;
@@ -416,12 +422,6 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       }
     } else {
       const c = leaf.spec;
-      if (c.sr) {
-        const sr = b.el('SR', bx, yy + 20, { labels: ['SR 6%'] });
-        b.wire(last, 'S', sr, 'N');
-        last = sr;
-        yy += 20;
-      }
       const sc = b.el('SC', bx, yy + 20, {
         labels: withModel([c.name, `${c.kvar}kvar`], c.nameplate),
         props: { kvar: c.kvar, sr: c.sr },
@@ -445,12 +445,28 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       const width = g0.leaves.length;
       // 分岐盤の見出しは配下の中央に置く
       const centerX = snapValue(startX + ((nCols - 1) * bp) / 2, GRID);
-      const subY = drawFeederHead(g0.feeder, centerX, width);
-      if (width > 0 && subY > 0) {
+      const before = b.elements.length;
+      const beforeTexts = b.texts.length;
+      drawFeederHead(g0.feeder, centerX, width);
+      if (width > 0) {
         if (width > 1) {
           b.wirePoints({ x: startX, y: subY }, { x: startX + (width - 1) * bp, y: subY }, 'bus');
         }
         g0.leaves.forEach((leaf, li) => drawLeaf(leaf, startX + li * bp, subY));
+      }
+      // 同じ盤から出る系統がひと目で分かるよう、盤ごとに破線で囲んで盤名を付ける
+      let box = emptyBBox();
+      for (const e of b.elements.slice(before)) {
+        box = union(box, bboxOfPrims(elementPrims(e)));
+        box = union(box, bboxOfPrims(elementLabelPrims(e)));
+      }
+      for (const t of b.texts.slice(beforeTexts)) {
+        box = union(box, bboxOfPrims([{ t: 'text', x: t.x, y: t.y, text: t.text, h: t.h, anchor: t.anchor }]));
+      }
+      if (!isEmptyBBox(box)) {
+        const r = inflate(box, 4);
+        b.shape(...dashedRect(r.minX, busY + 6, r.maxX, r.maxY));
+        b.text(r.minX, busY + 3, g0.feeder.name, TEXT.rating, 'start');
       }
     }
     busEndX = Math.max(busEndX, startX + (nCols - 1) * bp + 15);

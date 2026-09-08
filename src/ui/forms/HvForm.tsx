@@ -1,10 +1,11 @@
 import type { CapacitorSpec, HvFeederSpec, HvSlot, HvSpec, LvPanelSpec, Nameplate, TransformerSpec } from '../../model/types';
 import { HV_SLOT_LABEL } from '../../model/types';
-import { HV_SWITCHES, HV_SWITCH_LABEL, hasBreakingKA, hasFuse } from '../../model/switchgear';
-import { NameplateDisclosure, NameplateFields } from './NameplateFields';
+import { SWITCH_DEVICE_LABEL, deviceKey, hasBreakingKA, hasFuse, orderDevices } from '../../model/switchgear';
+import type { SwitchDevice } from '../../model/switchgear';
+import { NameplateFields, NameplateGroup, type NameplateItem } from './NameplateFields';
 import { newId } from '../../model/ids';
 import { useDispatch } from '../../state/context';
-import { CheckField, NumberField, Row, Section, SelectField, TextField } from '../fields';
+import { CheckField, NumberField, Row, Section, SelectField, SwitchPicker, TextField } from '../fields';
 
 /** 二次電圧の入力候補（任意の値も入力できる） */
 const SECONDARY_OPTIONS = ['105-210V', '210V', '105V', '420V', '440V', '400V', '210/105V'];
@@ -19,7 +20,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
     set({
       transformers: [
         ...hv.transformers,
-        { id: newId('tr'), name: `Tr-${hv.transformers.length + 1}`, phase: '3φ', kva: 100, secondary: '210V', switch: 'LBS', pfA: 30 },
+        { id: newId('tr'), name: `Tr-${hv.transformers.length + 1}`, phase: '3φ', kva: 100, secondary: '210V', devices: ['LBS', 'PF'], pfA: 30 },
       ],
     });
   const removeTr = (id: string) => set({ transformers: hv.transformers.filter((t) => t.id !== id) });
@@ -28,7 +29,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
     set({ capacitors: hv.capacitors.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
   const addSc = () =>
     set({
-      capacitors: [...hv.capacitors, { id: newId('sc'), name: `SC-${hv.capacitors.length + 1}`, kvar: 50, sr: true, switch: 'LBS', pfA: 30 }],
+      capacitors: [...hv.capacitors, { id: newId('sc'), name: `SC-${hv.capacitors.length + 1}`, kvar: 50, sr: true, devices: ['LBS', 'PF'], pfA: 30 }],
     });
   const removeSc = (id: string) => set({ capacitors: hv.capacitors.filter((c) => c.id !== id) });
 
@@ -41,7 +42,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
         {
           id: newId('fdr'),
           name: `高圧分岐盤No.${hv.feeders.length + 1}`,
-          breaker: 'VCB',
+          devices: ['VCB'],
           ratedA: 600,
           breakingKA: 12.5,
           ct: true,
@@ -60,8 +61,31 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
   /** 未入力のときの既定値。種別だけ入れても断面積が消えないようにする */
   const cableOf = (f: HvFeederSpec) => f.cable ?? { type: 'CVT', sq: 38 };
 
-  /** 変圧器・コンデンサ・分岐盤で共通の開閉装置の選択肢 */
-  const switchOptions = HV_SWITCHES.map((v) => ({ value: v, label: HV_SWITCH_LABEL[v] }));
+  /** 開閉装置以外（CT・OCR・ケーブル・SR）の銘板入力欄 */
+  const npItem = (
+    key: string,
+    label: string,
+    nameplates: Record<string, Nameplate> | undefined,
+    onChange: (next: Record<string, Nameplate>) => void,
+  ): NameplateItem => ({
+    key,
+    label,
+    value: nameplates?.[key],
+    onChange: (np: Nameplate) => onChange({ ...nameplates, [key]: np }),
+  });
+
+  /** 開閉装置ごとの銘板入力欄を作る（機器を選ぶと欄が増える） */
+  const deviceItems = (
+    devices: SwitchDevice[],
+    nameplates: Record<string, Nameplate> | undefined,
+    onChange: (next: Record<string, Nameplate>) => void,
+  ): NameplateItem[] =>
+    orderDevices(devices).map((dev) => ({
+      key: deviceKey(dev),
+      label: SWITCH_DEVICE_LABEL[dev],
+      value: nameplates?.[deviceKey(dev)],
+      onChange: (np: Nameplate) => onChange({ ...nameplates, [deviceKey(dev)]: np }),
+    }));
 
   const setSlotNp = (slot: HvSlot, np: Nameplate) =>
     set({ nameplates: { ...hv.nameplates, [slot]: np } });
@@ -75,12 +99,9 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
     if (hv.ds) out.push('ds');
     if (hv.metering.vt) out.push('vt');
     if (hv.la) out.push('la');
-    if (hv.mainBreaker.type === 'CB') {
-      out.push('ct', 'vcb');
-      if (hv.mainBreaker.ocr) out.push('ocr');
-    } else {
-      out.push('pf', 'lbs');
-    }
+    if (hv.mainBreaker.ct) out.push('ct');
+    if (hv.mainBreaker.ocr) out.push('ocr');
+    for (const dev of orderDevices(hv.mainBreaker.devices)) out.push(deviceKey(dev) as HvSlot);
     return out;
   };
 
@@ -138,35 +159,41 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
               <CheckField checked={hv.la} onChange={(v) => set({ la: v })} label="LA（避雷器）" />
             </Row>
             <Row label="主遮断装置">
-              <SelectField
-                value={mb.type}
-                options={[
-                  { value: 'CB', label: 'CB 形（VCB + OCR）' },
-                  { value: 'PF-S', label: 'PF・S 形（LBS + PF）' },
-                ]}
-                onChange={(v) =>
-                  set({
-                    mainBreaker:
-                      v === 'CB'
-                        ? { type: 'CB', vcb: { ratedA: 600, breakingKA: 12.5 }, ocr: true, ctRatio: '75/5A' }
-                        : { type: 'PF-S', lbs: { ratedA: 300 }, pfA: 40 },
-                  })
-                }
-              />
+              <SwitchPicker value={mb.devices} onChange={(v) => set({ mainBreaker: { ...mb, devices: v } })} />
             </Row>
-            {mb.type === 'CB' ? (
-              <Row label="VCB / CT">
-                VCB 定格 <NumberField value={mb.vcb.ratedA} onCommit={(v) => set({ mainBreaker: { ...mb, vcb: { ...mb.vcb, ratedA: v ?? 600 } } })} /> A{' '}
-                遮断容量 <NumberField value={mb.vcb.breakingKA} step={0.5} onCommit={(v) => set({ mainBreaker: { ...mb, vcb: { ...mb.vcb, breakingKA: v ?? 12.5 } } })} /> kA{' '}
-                CT 比 <TextField value={mb.ctRatio} onCommit={(v) => set({ mainBreaker: { ...mb, ctRatio: v } })} width={70} />{' '}
-                <CheckField checked={mb.ocr} onChange={(v) => set({ mainBreaker: { ...mb, ocr: v } })} label="OCR" />
-              </Row>
-            ) : (
-              <Row label="LBS / PF">
-                LBS 定格 <NumberField value={mb.lbs.ratedA} onCommit={(v) => set({ mainBreaker: { ...mb, lbs: { ratedA: v ?? 300 } } })} /> A{' '}
-                PF <NumberField value={mb.pfA} onCommit={(v) => set({ mainBreaker: { ...mb, pfA: v ?? 40 } })} /> A
-              </Row>
-            )}
+            <Row label="定格 / 保護">
+              定格 <NumberField value={mb.ratedA} onCommit={(v) => set({ mainBreaker: { ...mb, ratedA: v ?? 600 } })} /> A{' '}
+              {hasBreakingKA(mb.devices) && (
+                <>
+                  遮断容量{' '}
+                  <NumberField
+                    value={mb.breakingKA}
+                    step={0.5}
+                    allowEmpty
+                    onCommit={(v) => set({ mainBreaker: { ...mb, breakingKA: v } })}
+                  />{' '}
+                  kA{' '}
+                </>
+              )}
+              {hasFuse(mb.devices) && (
+                <>
+                  PF <NumberField value={mb.pfA} allowEmpty onCommit={(v) => set({ mainBreaker: { ...mb, pfA: v } })} /> A{' '}
+                </>
+              )}
+              <CheckField checked={mb.ct} onChange={(v) => set({ mainBreaker: { ...mb, ct: v } })} label="CT" />{' '}
+              {mb.ct && (
+                <>
+                  CT 比{' '}
+                  <TextField
+                    value={mb.ctRatio ?? ''}
+                    width={70}
+                    placeholder="75/5A"
+                    onCommit={(v) => set({ mainBreaker: { ...mb, ctRatio: v || undefined } })}
+                  />{' '}
+                </>
+              )}
+              <CheckField checked={mb.ocr} onChange={(v) => set({ mainBreaker: { ...mb, ocr: v } })} label="OCR" />
+            </Row>
             <Row label="計器">
               <CheckField checked={hv.metering.vt} onChange={(v) => set({ metering: { ...hv.metering, vt: v } })} label="VT" />{' '}
               <CheckField checked={hv.metering.v} onChange={(v) => set({ metering: { ...hv.metering, v } })} label="V 電圧計" />{' '}
@@ -199,6 +226,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                   <th>sq</th>
                   <th>長さ m</th>
                   <th>負荷名</th>
+                  <th>銘板</th>
                   <th></th>
                 </tr>
               </thead>
@@ -207,17 +235,17 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                   <tr key={f.id}>
                     <td><TextField value={f.name} onCommit={(v) => setFeeder(f.id, { name: v })} width={140} /></td>
                     <td>
-                      <SelectField value={f.breaker} options={switchOptions} onChange={(v) => setFeeder(f.id, { breaker: v })} />
+                      <SwitchPicker value={f.devices} onChange={(v) => setFeeder(f.id, { devices: v })} />
                     </td>
                     <td><NumberField value={f.ratedA} width={60} onCommit={(v) => setFeeder(f.id, { ratedA: v ?? f.ratedA })} /></td>
                     <td>
-                      {hasBreakingKA(f.breaker) ? (
+                      {hasBreakingKA(f.devices) && (
                         <NumberField value={f.breakingKA} step={0.5} width={60} allowEmpty onCommit={(v) => setFeeder(f.id, { breakingKA: v })} />
-                      ) : hasFuse(f.breaker) ? (
-                        <NumberField value={f.pfA} width={60} allowEmpty onCommit={(v) => setFeeder(f.id, { pfA: v })} />
-                      ) : (
-                        <span className="muted">—</span>
                       )}
+                      {hasFuse(f.devices) && (
+                        <NumberField value={f.pfA} width={60} allowEmpty onCommit={(v) => setFeeder(f.id, { pfA: v })} />
+                      )}
+                      {!hasBreakingKA(f.devices) && !hasFuse(f.devices) && <span className="muted">—</span>}
                     </td>
                     <td><CheckField checked={f.ct} onChange={(v) => setFeeder(f.id, { ct: v })} label="" /></td>
                     <td><TextField value={f.ctRatio ?? ''} width={70} onCommit={(v) => setFeeder(f.id, { ctRatio: v || undefined })} /></td>
@@ -251,6 +279,17 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                       />
                     </td>
                     <td><TextField value={f.loadName ?? ''} width={110} onCommit={(v) => setFeeder(f.id, { loadName: v || undefined })} /></td>
+                    <td>
+                      <NameplateGroup
+                        title={`${f.name} の機器銘板`}
+                        items={[
+                          ...deviceItems(f.devices, f.nameplates, (np) => setFeeder(f.id, { nameplates: np })),
+                          ...(f.ct ? [npItem('ct', '変流器 (CT)', f.nameplates, (np) => setFeeder(f.id, { nameplates: np }))] : []),
+                          ...(f.ocr ? [npItem('ocr', '過電流継電器 (OCR)', f.nameplates, (np) => setFeeder(f.id, { nameplates: np }))] : []),
+                          ...(f.cable ? [npItem('cable', '高圧ケーブル', f.nameplates, (np) => setFeeder(f.id, { nameplates: np }))] : []),
+                        ]}
+                      />
+                    </td>
                     <td><button onClick={() => removeFeeder(f.id)}>削除</button></td>
                   </tr>
                 ))}
@@ -285,9 +324,9 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                     <td>
                       <TextField value={t.secondary} width={90} list="secondary-options" onCommit={(v) => setTr(t.id, { secondary: v })} />
                     </td>
-                    <td><SelectField value={t.switch} options={switchOptions} onChange={(v) => setTr(t.id, { switch: v })} /></td>
+                    <td><SwitchPicker value={t.devices} onChange={(v) => setTr(t.id, { devices: v })} /></td>
                     <td>
-                      {hasFuse(t.switch) ? (
+                      {hasFuse(t.devices) ? (
                         <NumberField value={t.pfA} onCommit={(v) => setTr(t.id, { pfA: v ?? 30 })} width={60} />
                       ) : (
                         <span className="muted">—</span>
@@ -310,10 +349,12 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                       </select>
                     </td>
                     <td>
-                      <NameplateDisclosure
-                        label={`変圧器 ${t.name} の銘板`}
-                        value={t.nameplate}
-                        onChange={(np) => setTr(t.id, { nameplate: np })}
+                      <NameplateGroup
+                        title={`変圧器 ${t.name} の機器銘板`}
+                        items={[
+                          { key: 'body', label: '変圧器本体', value: t.nameplate, onChange: (np: Nameplate) => setTr(t.id, { nameplate: np }) },
+                          ...deviceItems(t.devices, t.nameplates, (np) => setTr(t.id, { nameplates: np })),
+                        ]}
                       />
                     </td>
                     <td><button onClick={() => removeTr(t.id)}>削除</button></td>
@@ -343,9 +384,9 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                     <td><TextField value={c.name} onCommit={(v) => setSc(c.id, { name: v })} width={70} /></td>
                     <td><NumberField value={c.kvar} onCommit={(v) => setSc(c.id, { kvar: v ?? 50 })} /></td>
                     <td><CheckField checked={c.sr} onChange={(v) => setSc(c.id, { sr: v })} label="SR 6%" /></td>
-                    <td><SelectField value={c.switch} options={switchOptions} onChange={(v) => setSc(c.id, { switch: v })} /></td>
+                    <td><SwitchPicker value={c.devices} onChange={(v) => setSc(c.id, { devices: v })} /></td>
                     <td>
-                      {hasFuse(c.switch) ? (
+                      {hasFuse(c.devices) ? (
                         <NumberField value={c.pfA} onCommit={(v) => setSc(c.id, { pfA: v ?? 30 })} width={60} />
                       ) : (
                         <span className="muted">—</span>
@@ -360,10 +401,13 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                       </select>
                     </td>
                     <td>
-                      <NameplateDisclosure
-                        label={`進相コンデンサ ${c.name} の銘板`}
-                        value={c.nameplate}
-                        onChange={(np) => setSc(c.id, { nameplate: np })}
+                      <NameplateGroup
+                        title={`進相コンデンサ ${c.name} の機器銘板`}
+                        items={[
+                          { key: 'body', label: '進相コンデンサ本体 (SC)', value: c.nameplate, onChange: (np: Nameplate) => setSc(c.id, { nameplate: np }) },
+                          ...(c.sr ? [npItem('sr', '直列リアクトル (SR)', c.nameplates, (np) => setSc(c.id, { nameplates: np }))] : []),
+                          ...deviceItems(c.devices, c.nameplates, (np) => setSc(c.id, { nameplates: np })),
+                        ]}
                       />
                     </td>
                     <td><button onClick={() => removeSc(c.id)}>削除</button></td>

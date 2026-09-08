@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { SwitchDevice } from '../model/switchgear';
+import { SWITCH_DEVICES, switchSummary, toggleDevice } from '../model/switchgear';
 
 /** blur / Enter で確定するテキスト入力（履歴を1手にまとめる） */
 export function TextField({
@@ -171,5 +173,33 @@ export function Section({ title, children, actions }: { title: ReactNode; childr
       </div>
       {children}
     </section>
+  );
+}
+
+/**
+ * 開閉装置の組み合わせを選ぶ。
+ * チェックした機器を上流→下流の順に並べ替えて返す。全部外すと「開閉器なし」。
+ */
+export function SwitchPicker({
+  value,
+  onChange,
+}: {
+  value: SwitchDevice[];
+  onChange: (v: SwitchDevice[]) => void;
+}) {
+  return (
+    <div className="switch-picker">
+      <div className="switch-picker-boxes">
+        {SWITCH_DEVICES.map((dev) => (
+          <CheckField
+            key={dev}
+            checked={value.includes(dev)}
+            onChange={(on) => onChange(toggleDevice(value, dev, on))}
+            label={dev}
+          />
+        ))}
+      </div>
+      <div className="switch-picker-summary">{switchSummary(value)}</div>
+    </div>
   );
 }
