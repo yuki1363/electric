@@ -9,7 +9,7 @@ import type { GenResult } from './types';
 const TX = 80;
 /** 機器の縦ピッチ（記号高 20 = 端子同士が接する） */
 const TP = 20;
-/** 分岐ピッチ */
+/** 分岐ピッチ（既定と、詰められる下限） */
 const BP_DEFAULT = 45;
 const BP_MIN = 35;
 
@@ -126,47 +126,141 @@ export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec
     place('LBS', withModel([`LBS ${mb.lbs.ratedA}A`], hv.nameplates?.lbs), { ratedA: mb.lbs.ratedA });
   }
 
-  // 高圧母線
+  // ---------------------------------------------------------------- 高圧母線と分岐
+
   const busY = y - 5;
   const bus0 = b.el('JUNCTION', TX, busY);
   if (prev) b.wire(prev, 'S', bus0, 'N');
 
-  type Branch =
+  type Leaf =
     | { kind: 'tr'; spec: HvSpec['transformers'][number] }
     | { kind: 'sc'; spec: HvSpec['capacitors'][number] };
-  const items: Branch[] = [
-    ...hv.transformers.map((spec): Branch => ({ kind: 'tr', spec })),
-    ...hv.capacitors.map((spec): Branch => ({ kind: 'sc', spec })),
+  /** 母線上の 1 区画。分岐盤か、母線直結の機器 1 台 */
+  type Group =
+    | { kind: 'feeder'; feeder: HvSpec['feeders'][number]; leaves: Leaf[] }
+    | { kind: 'direct'; leaf: Leaf };
+
+  const leafOf = {
+    tr: (spec: HvSpec['transformers'][number]): Leaf => ({ kind: 'tr', spec }),
+    sc: (spec: HvSpec['capacitors'][number]): Leaf => ({ kind: 'sc', spec }),
+  };
+  const allLeaves: Leaf[] = [...hv.transformers.map(leafOf.tr), ...hv.capacitors.map(leafOf.sc)];
+
+  const groups: Group[] = [
+    ...hv.feeders.map((feeder): Group => ({
+      kind: 'feeder',
+      feeder,
+      leaves: allLeaves.filter((l) => l.spec.feederId === feeder.id),
+    })),
+    ...allLeaves.filter((l) => !l.spec.feederId || !hv.feeders.some((f) => f.id === l.spec.feederId)).map(
+      (leaf): Group => ({ kind: 'direct', leaf }),
+    ),
   ];
 
-  const n = items.length;
-  let bp = BP_DEFAULT;
+  if (groups.length === 0) b.warn('変圧器・コンデンサ・分岐盤が登録されていません');
+
+  /** 区画の列数（分岐盤は配下の台数、最低 1 列） */
+  const columns = (g0: Group) => (g0.kind === 'feeder' ? Math.max(1, g0.leaves.length) : 1);
+
   const bx0 = TX + 20;
-  const endX = (pitch: number) => (n > 0 ? bx0 + (n - 1) * pitch + 15 : TX + 30);
-  if (endX(bp) > g.drawable.x2) bp = BP_MIN;
-  if (n === 0) b.warn('変圧器・コンデンサが登録されていません');
+  /** 分岐盤どうしの境界に足す余白 */
+  const GROUP_GAP = 10;
 
-  b.wirePoints({ x: TX, y: busY }, { x: endX(bp), y: busY }, 'bus');
-  b.text(TX - 3, busY - 3, '高圧母線 6.6kV', TEXT.rating, 'end');
+  // 用紙幅に応じて分岐ピッチを詰める。これで足りない分は最後に自動縮尺が受け持つ
+  const totalCols = groups.reduce((n, g0) => n + columns(g0), 0);
+  const gapCount = groups.reduce(
+    (n, g0, i) => (i > 0 && (g0.kind === 'feeder' || groups[i - 1]!.kind === 'feeder') ? n + 1 : n),
+    0,
+  );
+  const usableW = g.drawable.x2 - bx0 - 15 - gapCount * GROUP_GAP;
+  const bp =
+    totalCols > 1
+      ? Math.max(BP_MIN, Math.min(BP_DEFAULT, Math.floor(usableW / (totalCols - 1) / GRID) * GRID))
+      : BP_DEFAULT;
 
-  items.forEach((item, i) => {
-    const bx = bx0 + i * bp;
-    const j = b.el('JUNCTION', bx, busY);
-    const sw = b.el(item.spec.switch, bx, busY + 15, {
-      labels: [item.spec.switch === 'PC' ? `PC ${item.spec.pfA}A` : 'LBS'],
+  /** 分岐盤の見出し（VCB/LBS + CT + OCR）を描き、副母線の y を返す */
+  const drawFeederHead = (f: HvSpec['feeders'][number], cx: number, width: number): number => {
+    const fnp = (k: string) => f.nameplates?.[k];
+    let yy = busY;
+    const j = b.el('JUNCTION', cx, busY);
+    let last: Element = j;
+
+    if (f.breaker === 'VCB') {
+      const vcb = b.el('VCB', cx, yy + 20, {
+        labels: withModel([`VCB ${f.ratedA}A`, f.breakingKA ? `${f.breakingKA}kA` : ''].filter(Boolean), fnp('vcb')),
+        props: { ratedA: f.ratedA },
+      });
+      b.wire(last, 'S', vcb, 'N');
+      last = vcb;
+      yy += 20;
+    } else {
+      const lbs = b.el('LBS', cx, yy + 20, { labels: withModel([`LBS ${f.ratedA}A`], fnp('lbs')) });
+      b.wire(last, 'S', lbs, 'N');
+      last = lbs;
+      yy += 20;
+      if (f.pfA) {
+        const pf = b.el('PF', cx, yy + 20, { labels: withModel([`PF ${f.pfA}A`], fnp('pf')) });
+        b.wire(last, 'S', pf, 'N');
+        last = pf;
+        yy += 20;
+      }
+    }
+
+    if (f.ct) {
+      const ct = b.el('CT', cx, yy + 20, { labels: withModel([`CT ${f.ctRatio ?? ''}`.trim()], fnp('ct')) });
+      b.wire(last, 'S', ct, 'N');
+      last = ct;
+      yy += 20;
+      if (f.ocr) {
+        const ocr = b.el('OCR', cx + 30, ct.y, { labels: [] });
+        b.wire(ct, 'E', ocr, 'W');
+      }
+    }
+
+    if (f.cable) {
+      const ch = b.el('CABLE_HEAD', cx, yy + 20, {
+        labels: withModel(
+          [`${f.cable.type} ${f.cable.sq}sq`, f.cable.lengthM ? `${f.cable.lengthM}m` : ''].filter(Boolean),
+          fnp('cable'),
+        ),
+      });
+      b.wire(last, 'S', ch, 'N');
+      last = ch;
+      yy += 20;
+    }
+
+    // 盤名を見出しとして左上に置く
+    b.text(cx - 8, busY + 8, f.name, TEXT.rating, 'end');
+
+    if (width > 0) {
+      const subY = yy + 15;
+      b.wireToPoint(last, 'S', { x: cx, y: subY });
+      return subY;
+    }
+    // 配下が無い分岐盤は行き先を矢印で示す
+    const arrow = b.el('LOAD_ARROW', cx, yy + 20, { labels: [f.loadName || '負荷へ'] });
+    b.wire(last, 'S', arrow, 'N');
+    return 0;
+  };
+
+  /** 1 台ぶんの分岐（開閉器 → PF → 変圧器/コンデンサ）を描く */
+  const drawLeaf = (leaf: Leaf, bx: number, topY: number) => {
+    const j = b.el('JUNCTION', bx, topY);
+    const sw = b.el(leaf.spec.switch, bx, topY + 15, {
+      labels: [leaf.spec.switch === 'PC' ? `PC ${leaf.spec.pfA}A` : 'LBS'],
     });
     b.wire(j, 'S', sw, 'N');
-    let last = sw;
-    let yy = busY + 15;
-    if (item.spec.switch === 'LBS') {
-      const pf = b.el('PF', bx, yy + 20, { labels: [`PF ${item.spec.pfA}A`] });
+    let last: Element = sw;
+    let yy = topY + 15;
+    if (leaf.spec.switch === 'LBS') {
+      const pf = b.el('PF', bx, yy + 20, { labels: [`PF ${leaf.spec.pfA}A`] });
       b.wire(last, 'S', pf, 'N');
       last = pf;
       yy += 20;
     }
 
-    if (item.kind === 'tr') {
-      const t = item.spec;
+    if (leaf.kind === 'tr') {
+      const t = leaf.spec;
       const tr = b.el(t.phase === '1φ' ? 'TR_1PH' : 'TR_3PH', bx, yy + 20, {
         labels: withModel([t.name, `${t.phase} ${t.kva}kVA`, `6.6kV/${t.secondary}`], t.nameplate),
         props: { kva: t.kva, phase: t.phase, secondary: t.secondary },
@@ -187,7 +281,7 @@ export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec
         b.wire(tr, 'S', arrow, 'N');
       }
     } else {
-      const c = item.spec;
+      const c = leaf.spec;
       if (c.sr) {
         const sr = b.el('SR', bx, yy + 20, { labels: ['SR 6%'] });
         b.wire(last, 'S', sr, 'N');
@@ -203,7 +297,35 @@ export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec
       const gnd = b.el('GROUND_A', bx, yy + 15, { labels: [] });
       b.wire(sc, 'S', gnd, 'N');
     }
+  };
+
+  // 区画を左から並べる。分岐盤が隣り合う境界にだけ余白を足す
+  let x = bx0;
+  let busEndX = TX + 30;
+  groups.forEach((g0, gi) => {
+    const nCols = columns(g0);
+    const startX = snapValue(x, GRID);
+    if (g0.kind === 'direct') {
+      drawLeaf(g0.leaf, startX, busY);
+    } else {
+      const width = g0.leaves.length;
+      // 分岐盤の見出しは配下の中央に置く
+      const centerX = snapValue(startX + ((nCols - 1) * bp) / 2, GRID);
+      const subY = drawFeederHead(g0.feeder, centerX, width);
+      if (width > 0 && subY > 0) {
+        if (width > 1) {
+          b.wirePoints({ x: startX, y: subY }, { x: startX + (width - 1) * bp, y: subY }, 'bus');
+        }
+        g0.leaves.forEach((leaf, li) => drawLeaf(leaf, startX + li * bp, subY));
+      }
+    }
+    busEndX = Math.max(busEndX, startX + (nCols - 1) * bp + 15);
+    const gapAfter = g0.kind === 'feeder' || groups[gi + 1]?.kind === 'feeder' ? GROUP_GAP : 0;
+    x = startX + nCols * bp + gapAfter;
   });
+
+  b.wirePoints({ x: TX, y: busY }, { x: busEndX, y: busY }, 'bus');
+  b.text(TX - 3, busY - 3, '高圧母線 6.6kV', TEXT.rating, 'end');
 
   // 筐体接地（作図内容の下端に合わせて置く）
   if (hv.grounding.aType) {

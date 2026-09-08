@@ -1,4 +1,4 @@
-import type { CapacitorSpec, HvSlot, HvSpec, LvPanelSpec, Nameplate, TransformerSpec } from '../../model/types';
+import type { CapacitorSpec, HvFeederSpec, HvSlot, HvSpec, LvPanelSpec, Nameplate, TransformerSpec } from '../../model/types';
 import { HV_SLOT_LABEL } from '../../model/types';
 import { NameplateDisclosure, NameplateFields } from './NameplateFields';
 import { newId } from '../../model/ids';
@@ -34,6 +34,31 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
       capacitors: [...hv.capacitors, { id: newId('sc'), name: `SC-${hv.capacitors.length + 1}`, kvar: 50, sr: true, switch: 'LBS', pfA: 30 }],
     });
   const removeSc = (id: string) => set({ capacitors: hv.capacitors.filter((c) => c.id !== id) });
+
+  const setFeeder = (id: string, patch: Partial<HvFeederSpec>) =>
+    set({ feeders: hv.feeders.map((f) => (f.id === id ? { ...f, ...patch } : f)) });
+  const addFeeder = () =>
+    set({
+      feeders: [
+        ...hv.feeders,
+        {
+          id: newId('fdr'),
+          name: `高圧分岐盤No.${hv.feeders.length + 1}`,
+          breaker: 'VCB',
+          ratedA: 600,
+          breakingKA: 12.5,
+          ct: true,
+          ctRatio: '100/5A',
+          ocr: true,
+        },
+      ],
+    });
+  const removeFeeder = (id: string) =>
+    set({
+      feeders: hv.feeders.filter((f) => f.id !== id),
+      transformers: hv.transformers.map((t) => (t.feederId === id ? { ...t, feederId: undefined } : t)),
+      capacitors: hv.capacitors.map((c) => (c.feederId === id ? { ...c, feederId: undefined } : c)),
+    });
 
   const setSlotNp = (slot: HvSlot, np: Nameplate) =>
     set({ nameplates: { ...hv.nameplates, [slot]: np } });
@@ -148,6 +173,66 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
             </Row>
           </Section>
 
+          <Section title="高圧分岐盤" actions={<button onClick={addFeeder}>+ 追加</button>}>
+            <p className="muted">
+              高圧母線から分岐する VCB / LBS 付きの盤です。変圧器・コンデンサの「所属」欄でこの盤を選ぶと、盤の下にまとめて描かれます。
+            </p>
+            <table className="grid-table">
+              <thead>
+                <tr>
+                  <th>盤名</th>
+                  <th>遮断/開閉</th>
+                  <th>定格 A</th>
+                  <th>遮断 kA / PF A</th>
+                  <th>CT</th>
+                  <th>CT 比</th>
+                  <th>OCR</th>
+                  <th>ケーブル</th>
+                  <th>負荷名</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {hv.feeders.map((f) => (
+                  <tr key={f.id}>
+                    <td><TextField value={f.name} onCommit={(v) => setFeeder(f.id, { name: v })} width={140} /></td>
+                    <td>
+                      <SelectField
+                        value={f.breaker}
+                        options={[{ value: 'VCB', label: 'VCB' }, { value: 'LBS', label: 'LBS+PF' }]}
+                        onChange={(v) => setFeeder(f.id, { breaker: v })}
+                      />
+                    </td>
+                    <td><NumberField value={f.ratedA} width={60} onCommit={(v) => setFeeder(f.id, { ratedA: v ?? f.ratedA })} /></td>
+                    <td>
+                      {f.breaker === 'VCB' ? (
+                        <NumberField value={f.breakingKA} step={0.5} width={60} allowEmpty onCommit={(v) => setFeeder(f.id, { breakingKA: v })} />
+                      ) : (
+                        <NumberField value={f.pfA} width={60} allowEmpty onCommit={(v) => setFeeder(f.id, { pfA: v })} />
+                      )}
+                    </td>
+                    <td><CheckField checked={f.ct} onChange={(v) => setFeeder(f.id, { ct: v })} label="" /></td>
+                    <td><TextField value={f.ctRatio ?? ''} width={70} onCommit={(v) => setFeeder(f.id, { ctRatio: v || undefined })} /></td>
+                    <td><CheckField checked={f.ocr} onChange={(v) => setFeeder(f.id, { ocr: v })} label="" /></td>
+                    <td>
+                      <TextField
+                        value={f.cable ? `${f.cable.type} ${f.cable.sq}` : ''}
+                        width={100}
+                        placeholder="CVT 38"
+                        onCommit={(v) => {
+                          const m = v.trim().match(/^(\S+)\s+(\d+(?:\.\d+)?)/);
+                          setFeeder(f.id, { cable: m ? { type: m[1]!, sq: Number(m[2]) } : undefined });
+                        }}
+                      />
+                    </td>
+                    <td><TextField value={f.loadName ?? ''} width={110} onCommit={(v) => setFeeder(f.id, { loadName: v || undefined })} /></td>
+                    <td><button onClick={() => removeFeeder(f.id)}>削除</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Section>
+
           <Section title="変圧器" actions={<button onClick={addTr}>+ 追加</button>}>
             <table className="grid-table">
               <thead>
@@ -158,6 +243,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                   <th>二次電圧</th>
                   <th>開閉器</th>
                   <th>PF A</th>
+                  <th>所属分岐盤</th>
                   <th>給電先</th>
                   <th>銘板</th>
                   <th></th>
@@ -174,6 +260,14 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                     <td><SelectField value={t.secondary} options={SECONDARY} onChange={(v) => setTr(t.id, { secondary: v })} /></td>
                     <td><SelectField value={t.switch} options={[{ value: 'LBS', label: 'LBS+PF' }, { value: 'PC', label: 'PC' }]} onChange={(v) => setTr(t.id, { switch: v })} /></td>
                     <td><NumberField value={t.pfA} onCommit={(v) => setTr(t.id, { pfA: v ?? 30 })} width={60} /></td>
+                    <td>
+                      <select value={t.feederId ?? ''} onChange={(e) => setTr(t.id, e.target.value ? { feederId: e.target.value } : { feederId: undefined })}>
+                        <option value="">高圧母線に直結</option>
+                        {hv.feeders.map((f) => (
+                          <option key={f.id} value={f.id}>{f.name}</option>
+                        ))}
+                      </select>
+                    </td>
                     <td>
                       <select value={t.feeds ?? ''} onChange={(e) => setTr(t.id, e.target.value ? { feeds: e.target.value } : { feeds: undefined })}>
                         <option value="">（未指定）</option>
@@ -205,6 +299,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                   <th>直列リアクトル</th>
                   <th>開閉器</th>
                   <th>PF A</th>
+                  <th>所属分岐盤</th>
                   <th>銘板</th>
                   <th></th>
                 </tr>
@@ -217,6 +312,14 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                     <td><CheckField checked={c.sr} onChange={(v) => setSc(c.id, { sr: v })} label="SR 6%" /></td>
                     <td><SelectField value={c.switch} options={[{ value: 'LBS', label: 'LBS+PF' }, { value: 'PC', label: 'PC' }]} onChange={(v) => setSc(c.id, { switch: v })} /></td>
                     <td><NumberField value={c.pfA} onCommit={(v) => setSc(c.id, { pfA: v ?? 30 })} width={60} /></td>
+                    <td>
+                      <select value={c.feederId ?? ''} onChange={(e) => setSc(c.id, e.target.value ? { feederId: e.target.value } : { feederId: undefined })}>
+                        <option value="">高圧母線に直結</option>
+                        {hv.feeders.map((f) => (
+                          <option key={f.id} value={f.id}>{f.name}</option>
+                        ))}
+                      </select>
+                    </td>
                     <td>
                       <NameplateDisclosure
                         label={`進相コンデンサ ${c.name} の銘板`}
