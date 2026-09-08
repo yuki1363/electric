@@ -62,7 +62,16 @@ export type HvSlot =
   | 'lbs'
   | 'pf'
   | 'vcs'
-  | 'pc';
+  | 'pc'
+  | 'lbs_pf'
+  | 'zct'
+  | 'vtf'
+  | 'whTr'
+  | 'meterA'
+  | 'meterV'
+  | 'meterW'
+  | 'meterPf'
+  | 'meterWh';
 
 export const HV_SLOT_LABEL: Record<HvSlot, string> = {
   pas: '区分開閉器 (PAS/UGS)',
@@ -79,6 +88,15 @@ export const HV_SLOT_LABEL: Record<HvSlot, string> = {
   pf: '限流ヒューズ (PF)',
   vcs: '真空電磁接触器 (VCS)',
   pc: '高圧カットアウト (PC)',
+  lbs_pf: 'PF付負荷開閉器 (LBS)',
+  zct: '零相変流器 (ZCT)',
+  vtf: 'VT ヒューズ',
+  whTr: '取引用電力量計 (Wh)',
+  meterA: '電流計 (A)',
+  meterV: '電圧計 (V)',
+  meterW: '電力計 (W)',
+  meterPf: '力率計 (PF)',
+  meterWh: '電力量計 (Wh)',
 };
 
 /** 図面上の機器に紐付かない銘板（制御補機など）。銘板表にのみ出す */
@@ -263,7 +281,8 @@ export interface Wire {
   points: Point[];
   /** true のとき自動ルータは points を上書きしない */
   manual: boolean;
-  style: 'normal' | 'bus';
+  /** normal: 主回路 / bus: 母線 / control: 計器・制御回路（細線） */
+  style: 'normal' | 'bus' | 'control';
 }
 
 export interface TextItem {

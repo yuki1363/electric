@@ -174,6 +174,29 @@ export const VCS: SymbolDef = {
   defaultLabels: ['VCS'],
 };
 
+/** 限流ヒューズ付高圧交流負荷開閉器 PF付LBS: 負荷開閉器とヒューズを 1 台にまとめた記号 */
+export const LBS_PF: SymbolDef = {
+  kind: 'LBS_PF',
+  nameJa: 'PF付負荷開閉器 (LBS)',
+  category: 'hv',
+  bbox: { w: 12, h: 30 },
+  prims: [
+    // 上半分が負荷開閉器、下半分が限流ヒューズ（1 台にまとまった機器）
+    L(0, -15, 0, -9), // 上側リード
+    L(0, -1, 4.5, -9.5), // ブレード（開路状態）
+    C(4.5, -9.5, 1.2), // 固定接点
+    L(0, -1, 0, 1), // 開閉器とヒューズの間
+    RECT(-2, 1, 2, 9), // 限流ヒューズ
+    L(0, 9, 0, 15), // 下側リード
+  ],
+  ports: [
+    { id: 'N', x: 0, y: -15, dir: 'N' },
+    { id: 'S', x: 0, y: 15, dir: 'S' },
+  ],
+  labelAnchor: rightLabel(12),
+  defaultLabels: ['PF付LBS'],
+};
+
 /** 変流器 CT: 導体を囲む円、二次側は E へ */
 export const CT: SymbolDef = {
   kind: 'CT',
@@ -310,6 +333,7 @@ export const HV_SYMBOLS: SymbolDef[] = [
   DS,
   VCB,
   LBS,
+  LBS_PF,
   VCS,
   PC,
   PF,

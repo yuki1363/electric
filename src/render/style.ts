@@ -17,15 +17,16 @@ export const COLOR_PORT = '#e53935';
 export const COLOR_GRID = '#e0e0e0';
 
 /** レイヤ（SVG の g / DXF の LAYER） */
-export type Layer = 'FRAME' | 'SYMBOL' | 'WIRE' | 'BUS' | 'TEXT' | 'TABLE';
+export type Layer = 'FRAME' | 'SYMBOL' | 'WIRE' | 'BUS' | 'CONTROL' | 'TEXT' | 'TABLE';
 
-export const LAYER_ORDER: Layer[] = ['FRAME', 'TABLE', 'BUS', 'WIRE', 'SYMBOL', 'TEXT'];
+export const LAYER_ORDER: Layer[] = ['FRAME', 'TABLE', 'BUS', 'WIRE', 'CONTROL', 'SYMBOL', 'TEXT'];
 
 export const LAYER_STROKE: Record<Layer, StrokeClass> = {
   FRAME: 'thick',
   TABLE: 'thin',
   BUS: 'thick',
   WIRE: 'medium',
+  CONTROL: 'thin',
   SYMBOL: 'medium',
   TEXT: 'thin',
 };
@@ -36,6 +37,7 @@ export const LAYER_DXF_COLOR: Record<Layer, number> = {
   TABLE: 7,
   BUS: 1,
   WIRE: 7,
+  CONTROL: 7,
   SYMBOL: 7,
   TEXT: 7,
 };

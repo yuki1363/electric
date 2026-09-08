@@ -47,6 +47,40 @@ describe('高圧受電設備 単線結線図 生成', () => {
     expect(new Set(xs).size).toBe(1);
   });
 
+  it('作図の決まり: 計器回路は細線、VT には一次ヒューズ、コンデンサは接地しない', () => {
+    // 計器・制御回路は control（細線 = CONTROL レイヤ）で描く
+    const control = d.wires.filter((w) => w.style === 'control');
+    expect(control.length).toBeGreaterThan(0);
+    const meterIds = new Set(d.elements.filter((e) => e.kind.startsWith('METER_')).map((e) => e.id));
+    for (const m of meterIds) {
+      const wires = d.wires.filter((w) => [w.from, w.to].some((e) => isPortEnd(e) && e.elementId === m));
+      expect(wires.length).toBeGreaterThan(0);
+      for (const w of wires) expect(w.style).toBe('control');
+    }
+    // 主回路は control にしない
+    const vcb = d.elements.find((e) => e.kind === 'VCB')!;
+    for (const w of d.wires.filter((w) => [w.from, w.to].some((e) => isPortEnd(e) && e.elementId === vcb.id))) {
+      expect(w.style).not.toBe('control');
+    }
+
+    // VT の一次側に限流ヒューズが入る
+    const vt = d.elements.find((e) => e.kind === 'VT')!;
+    const vtf = d.elements.find((e) => e.kind === 'PF' && e.rot === 270)!;
+    expect(vtf).toBeDefined();
+    expect(
+      d.wires.some(
+        (w) =>
+          isPortEnd(w.from) && w.from.elementId === vtf.id && isPortEnd(w.to) && w.to.elementId === vt.id,
+      ),
+    ).toBe(true);
+
+    // 高圧進相コンデンサの下端は接地しない
+    const sc = d.elements.find((e) => e.kind === 'SC')!;
+    const below = d.wires.filter((w) => isPortEnd(w.from) && w.from.elementId === sc.id);
+    expect(below).toEqual([]);
+    expect(d.elements.some((e) => e.kind === 'GROUND_A' && e.x === sc.x && e.y > sc.y)).toBe(false);
+  });
+
   it('全配線は直交し、参照ポートが存在する', () => {
     for (const w of d.wires) {
       expect(isOrthogonal(w.points)).toBe(true);
@@ -115,10 +149,14 @@ describe('高圧受電設備 単線結線図 生成', () => {
     const kinds = rs[0]!.diagram.elements.map((e) => e.kind);
     expect(kinds).not.toContain('VCB');
     expect(kinds).not.toContain('OCR');
-    expect(kinds.filter((k) => k === 'PF').length).toBe(1 + p.hv.transformers.length + p.hv.capacitors.length);
+    // 主遮断装置の PF + 分岐ぶん + VT ヒューズ（横向き）
+    const pfs = rs[0]!.diagram.elements.filter((e) => e.kind === 'PF');
+    expect(pfs.filter((e) => e.rot === 0).length).toBe(1 + p.hv.transformers.length + p.hv.capacitors.length);
+    expect(pfs.filter((e) => e.rot === 270).length).toBe(1);
     // 幹線上（x = 主回路）では LBS が PF の上に来る
     const busY = rs[0]!.diagram.wires.find((w) => w.style === 'bus')!.points[0]!.y;
-    const main = rs[0]!.diagram.elements.filter((e) => e.y < busY);
+    // 幹線に縦向きで並ぶ機器だけ見る（VT ヒューズは横向きで脇に付く）
+    const main = rs[0]!.diagram.elements.filter((e) => e.y < busY && e.rot === 0);
     const lbs = main.find((e) => e.kind === 'LBS')!;
     const pf = main.find((e) => e.kind === 'PF')!;
     expect(lbs.x).toBe(pf.x);
@@ -222,14 +260,14 @@ describe('開閉装置の種類', () => {
   };
 
   it('LBS+VCS は LBS → PF → VCS の順に直列で描く', () => {
-    expect(column({ devices: ['LBS', 'PF', 'VCS'], sr: true })).toEqual(['LBS', 'PF', 'VCS', 'SR', 'SC', 'GROUND_A']);
+    expect(column({ devices: ['LBS', 'PF', 'VCS'], sr: true })).toEqual(['LBS', 'PF', 'VCS', 'SR', 'SC']);
   });
 
   it('VCB / VCS / PC はその 1 台だけを描く', () => {
-    expect(column({ devices: ['VCB'], sr: false })).toEqual(['VCB', 'SC', 'GROUND_A']);
-    expect(column({ devices: ['VCS'], sr: false })).toEqual(['VCS', 'SC', 'GROUND_A']);
-    expect(column({ devices: ['PC'], sr: false })).toEqual(['PC', 'SC', 'GROUND_A']);
-    expect(column({ devices: ["LBS", "PF"], sr: false })).toEqual(['LBS', 'PF', 'SC', 'GROUND_A']);
+    expect(column({ devices: ['VCB'], sr: false })).toEqual(['VCB', 'SC']);
+    expect(column({ devices: ['VCS'], sr: false })).toEqual(['VCS', 'SC']);
+    expect(column({ devices: ['PC'], sr: false })).toEqual(['PC', 'SC']);
+    expect(column({ devices: ['LBS', 'PF'], sr: false })).toEqual(['LBS', 'PF', 'SC']);
   });
 
   it('配線は直交してポート位置に一致する', () => {

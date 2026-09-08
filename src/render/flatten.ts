@@ -95,7 +95,7 @@ export function flattenDiagram(d: Diagram, opts: FlattenOpts = {}): WorldPrim[] 
     const len = w.points.reduce((s, p, i) => (i === 0 ? 0 : s + Math.abs(p.x - w.points[i - 1]!.x) + Math.abs(p.y - w.points[i - 1]!.y)), 0);
     if (len < 1e-6) continue;
     out.push({
-      layer: w.style === 'bus' ? 'BUS' : 'WIRE',
+      layer: w.style === 'bus' ? 'BUS' : w.style === 'control' ? 'CONTROL' : 'WIRE',
       prim: { t: 'polyline', pts: w.points.map((p) => ({ x: p.x, y: p.y })) },
       ref: w.id,
     });

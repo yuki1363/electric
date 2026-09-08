@@ -25,6 +25,15 @@ type MeterKind = 'METER_V' | 'METER_A' | 'METER_W' | 'METER_PF' | 'METER_WH';
  * 計器が使う計測回路。
  * 電圧計は VT 二次だけ、電流計は CT 二次だけ、電力計・力率計・電力量計は両方を使う。
  */
+/** 計器 → 銘板スロット */
+const METER_SLOT: Record<MeterKind, HvSlot> = {
+  METER_A: 'meterA',
+  METER_V: 'meterV',
+  METER_W: 'meterW',
+  METER_PF: 'meterPf',
+  METER_WH: 'meterWh',
+};
+
 const METER_CIRCUIT: Record<MeterKind, { v: boolean; c: boolean }> = {
   METER_V: { v: true, c: false },
   METER_A: { v: false, c: true },
@@ -212,8 +221,8 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     // 取引用計器
     if (hv.vct) {
       const vct = place('VCT', []);
-      const wh = b.el('METER_WH', TX + 25, vct.y, { labels: ['取引用計器'] });
-      b.wire(vct, 'E', wh, 'W');
+      const wh = b.el('METER_WH', TX + 25, vct.y, { labels: withModel(['取引用計器'], hv.nameplates?.whTr) });
+      b.wire(vct, 'E', wh, 'W', 'control');
     }
 
     // 断路器
@@ -260,7 +269,7 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       let last: { el: Element; port: string } | null = ct ? { el: ct, port: 'E' } : null;
       if (ct && ocr) {
         const o = b.el('OCR', TX + 30, mY, { labels: [] });
-        b.wire(ct, 'E', o, 'W');
+        b.wire(ct, 'E', o, 'W', 'control');
         last = { el: o, port: 'E' };
       }
       if (!tap || !hasMetering) return;
@@ -269,30 +278,38 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       /** 電圧回路につなぐ計器を左から順に */
       const voltEls: Element[] = [];
       currKinds.forEach((k) => {
-        const m = b.el(k, x, mY, { labels: [] });
-        if (last) b.wire(last.el, last.port, m, 'W');
+        const m = b.el(k, x, mY, { labels: withModel([], hv.nameplates?.[METER_SLOT[k]]) });
+        if (last) b.wire(last.el, last.port, m, 'W', 'control');
         last = { el: m, port: 'E' };
         if (METER_CIRCUIT[k].v) voltEls.push(m);
         x += MP;
       });
       if (currKinds.length > 0) b.text(TX + 52, mY + 7, 'CT二次', TEXT.rating, 'end');
       voltOnlyKinds.forEach((k) => {
-        voltEls.push(b.el(k, x, mY, { labels: [] }));
+        voltEls.push(b.el(k, x, mY, { labels: withModel([], hv.nameplates?.[METER_SLOT[k]]) }));
         x += MP;
       });
 
-      // 計器用変圧器と電圧回路
+      // 計器用変圧器と電圧回路。VT の一次側には限流ヒューズを入れる
       const vx = x + 10;
       const vbusY = mY + 15;
       const vt = hv.metering.vt ? b.el('VT', vx, mY, { labels: withModel(['VT'], hv.nameplates?.vt) }) : null;
-      if (vt) b.wire(tap, 'E', vt, 'N');
+      if (vt) {
+        // 引き出し線の途中に横向きで置く（VT ヒューズ）
+        const vtf = b.el('PF', TX + 30, tapY, {
+          rot: 270,
+          labels: withModel(['VTヒューズ'], hv.nameplates?.vtf),
+        });
+        b.wire(tap, 'E', vtf, 'N');
+        b.wire(vtf, 'S', vt, 'N');
+      }
       if (voltEls.length > 0) {
-        if (vt) b.wireToPoint(vt, 'S', { x: vx, y: vbusY });
-        else b.wireToPoint(tap, 'E', { x: vx, y: vbusY });
+        if (vt) b.wireToPoint(vt, 'S', { x: vx, y: vbusY }, 'control');
+        else b.wireToPoint(tap, 'E', { x: vx, y: vbusY }, 'control');
         const left = voltEls[0]!.x;
-        b.wirePoints({ x: vx, y: vbusY }, { x: left, y: vbusY });
+        b.wirePoints({ x: vx, y: vbusY }, { x: left, y: vbusY }, 'control');
         voltEls.forEach((m) => {
-          b.wireToPoint(m, 'S', { x: m.x, y: vbusY });
+          b.wireToPoint(m, 'S', { x: m.x, y: vbusY }, 'control');
           if (m.x !== left) b.el('JUNCTION', m.x, vbusY);
         });
         b.text(vx + 10, vbusY + 1, 'VT二次', TEXT.rating, 'start');
@@ -551,9 +568,8 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       labels: withModel([c.name, `${c.kvar}kvar`], c.nameplate),
       props: { kvar: c.kvar, sr: c.sr },
     });
+    // 高圧進相コンデンサの下端は他相へつながるので、単線結線図では接地しない
     b.wire(last, 'S', sc, 'N');
-    const gnd = b.el('GROUND_A', cx, baseY + 15, { labels: [] });
-    b.wire(sc, 'S', gnd, 'N');
   };
 
   // 区画を左から並べる。分岐盤が隣り合う境界にだけ余白を足す
@@ -610,8 +626,7 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     const bottom = Math.max(...b.elements.map((e) => e.y), busY);
     const gx = snapValue(g.drawable.x1 + 10, GRID);
     const gy = snapValue(bottom, GRID);
-    const gnd = b.el('GROUND_A', gx, gy, { labels: ['A種接地（筐体）'] });
-    b.wireFromPoint({ x: gx, y: gy - 15 }, gnd, 'N');
+    b.el('GROUND_A', gx, gy, { labels: ['A種接地（筐体）'] });
   }
 
   return {

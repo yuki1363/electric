@@ -4,17 +4,28 @@
  * 「どの機器をどの順に直列に並べるか」をここ 1 か所で決める。
  */
 
-export type SwitchDevice = 'LBS' | 'VCB' | 'PC' | 'PF' | 'VCS';
+export type SwitchDevice = 'LBS_PF' | 'LBS' | 'VCB' | 'PC' | 'PF' | 'VCS';
 
 /** 上流から下流への並び順。選んだ機器はこの順に描く */
-export const SWITCH_DEVICES: SwitchDevice[] = ['LBS', 'VCB', 'PC', 'PF', 'VCS'];
+export const SWITCH_DEVICES: SwitchDevice[] = ['LBS_PF', 'LBS', 'VCB', 'PC', 'PF', 'VCS'];
 
 export const SWITCH_DEVICE_LABEL: Record<SwitchDevice, string> = {
+  LBS_PF: 'PF付LBS（限流ヒューズ付負荷開閉器・1 台）',
   LBS: 'LBS（負荷開閉器）',
   VCB: 'VCB（真空遮断器）',
   PC: 'PC（高圧カットアウト）',
   PF: 'PF（限流ヒューズ）',
   VCS: 'VCS（真空電磁接触器）',
+};
+
+/** チェックボックスや要約に出す短い名前 */
+export const SWITCH_DEVICE_SHORT: Record<SwitchDevice, string> = {
+  LBS_PF: 'PF付LBS',
+  LBS: 'LBS',
+  VCB: 'VCB',
+  PC: 'PC',
+  PF: 'PF',
+  VCS: 'VCS',
 };
 
 const isDevice = (v: unknown): v is SwitchDevice => SWITCH_DEVICES.includes(v as SwitchDevice);
@@ -36,12 +47,13 @@ export function toggleDevice(devs: readonly SwitchDevice[], dev: SwitchDevice, o
 /** 画面表示用の要約 */
 export function switchSummary(devs: readonly SwitchDevice[] | undefined): string {
   const o = orderDevices(devs);
-  return o.length === 0 ? '開閉器なし' : o.join(' → ');
+  return o.length === 0 ? '開閉器なし' : o.map((d) => SWITCH_DEVICE_SHORT[d]).join(' → ');
 }
 
-/** 限流ヒューズの定格入力が要るか */
+/** 限流ヒューズの定格入力が要るか（PF 単体でも PF付LBS でも要る） */
 export function hasFuse(devs: readonly SwitchDevice[] | undefined): boolean {
-  return orderDevices(devs).includes('PF');
+  const o = orderDevices(devs);
+  return o.includes('PF') || o.includes('LBS_PF');
 }
 
 /** 遮断容量の入力が要るか */
@@ -55,6 +67,9 @@ export function deviceLabel(
   o: { ratedA?: number; breakingKA?: number; pfA?: number } = {},
 ): string[] {
   if (dev === 'PF') return [o.pfA ? `PF ${o.pfA}A` : 'PF'];
+  if (dev === 'LBS_PF') {
+    return [o.ratedA ? `PF付LBS ${o.ratedA}A` : 'PF付LBS', o.pfA ? `PF ${o.pfA}A` : ''].filter(Boolean);
+  }
   if (dev === 'PC') {
     const a = o.pfA ?? o.ratedA;
     return [a ? `PC ${a}A` : 'PC'];
@@ -77,6 +92,7 @@ export function migrateDevices(v: unknown): SwitchDevice[] {
   if (Array.isArray(v)) return orderDevices(v.filter(isDevice));
   if (typeof v !== 'string') return [];
   const parts = v.split('+').map((s) => s.trim().toUpperCase());
+  if (parts.length === 1 && parts[0] === 'LBS_PF') return ['LBS_PF'];
   const out: SwitchDevice[] = [];
   for (const p of parts) {
     if (!isDevice(p)) continue;

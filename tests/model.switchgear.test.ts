@@ -37,6 +37,7 @@ describe('開閉装置の組み合わせ', () => {
 
   it('限流ヒューズと遮断容量の要否', () => {
     expect(hasFuse(['LBS', 'PF'])).toBe(true);
+    expect(hasFuse(['LBS'])).toBe(false);
     expect(hasFuse(['VCS'])).toBe(false);
     expect(hasBreakingKA(['VCB'])).toBe(true);
     expect(hasBreakingKA(['LBS', 'PF'])).toBe(false);
@@ -68,8 +69,18 @@ describe('開閉装置の組み合わせ', () => {
     expect(migrateDevices('')).toEqual([]);
   });
 
-  it('選べる機器は 5 つ', () => {
-    expect(SWITCH_DEVICES).toEqual(['LBS', 'VCB', 'PC', 'PF', 'VCS']);
+  it('選べる機器と並び順', () => {
+    expect(SWITCH_DEVICES).toEqual(['LBS_PF', 'LBS', 'VCB', 'PC', 'PF', 'VCS']);
+  });
+
+  it('PF付LBS は 1 台でヒューズ込み', () => {
+    expect(hasFuse(['LBS_PF'])).toBe(true);
+    expect(hasBreakingKA(['LBS_PF'])).toBe(false);
+    expect(deviceLabel('LBS_PF', { ratedA: 200, pfA: 30 })).toEqual(['PF付LBS 200A', 'PF 30A']);
+    expect(deviceLabel('LBS_PF', {})).toEqual(['PF付LBS']);
+    expect(switchSummary(['LBS_PF'])).toBe('PF付LBS');
+    // LBS + PF を別々に選んだ場合と混ざらない
+    expect(orderDevices(['PF', 'LBS_PF'])).toEqual(['LBS_PF', 'PF']);
   });
 });
 

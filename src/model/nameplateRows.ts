@@ -60,10 +60,25 @@ export function nameplateRows(project: Project): NameplateRow[] {
         '引込',
       ),
     );
-    if (hv.vct) out.push(row('VCT', np('vct'), '取引用計器', '高圧受電盤'));
+    if (hv.vct) {
+      out.push(row('VCT', np('vct'), '取引用計器', '高圧受電盤'));
+      out.push(row('Wh', np('whTr'), '取引用電力量計', '高圧受電盤'));
+    }
     if (hv.ds) out.push(row('DS', np('ds'), '7.2kV', '高圧受電盤'));
     if (hv.la) out.push(row('LA', np('la'), '', '高圧受電盤'));
-    if (hv.metering.vt) out.push(row('VT', np('vt'), '6600/110V', '高圧受電盤'));
+    if (hv.metering.vt) {
+      out.push(row('VTヒューズ', np('vtf'), '', '高圧受電盤'));
+      out.push(row('VT', np('vt'), '6600/110V', '高圧受電盤'));
+    }
+
+    const meters: [boolean, string, HvSlot][] = [
+      [hv.metering.v, 'V', 'meterV'],
+      [hv.metering.a, 'A', 'meterA'],
+      [hv.metering.w, 'W', 'meterW'],
+      [hv.metering.pf, 'PF計', 'meterPf'],
+      [hv.metering.wh, 'Wh', 'meterWh'],
+    ];
+    for (const [on, name, slot] of meters) if (on) out.push(row(name, np(slot), '', '高圧受電盤'));
 
     const mb = hv.mainBreaker;
     if (mb.ct) out.push(row('CT', np('ct'), mb.ctRatio ?? '', '高圧受電盤'));

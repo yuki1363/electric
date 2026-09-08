@@ -60,6 +60,7 @@ export type SymbolKind =
   | 'DS'
   | 'VCB'
   | 'LBS'
+  | 'LBS_PF'
   | 'VCS'
   | 'PC'
   | 'PF'

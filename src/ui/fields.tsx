@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { SwitchDevice } from '../model/switchgear';
-import { SWITCH_DEVICES, switchSummary, toggleDevice } from '../model/switchgear';
+import { SWITCH_DEVICES, SWITCH_DEVICE_SHORT, switchSummary, toggleDevice } from '../model/switchgear';
 
 /** blur / Enter で確定するテキスト入力（履歴を1手にまとめる） */
 export function TextField({
@@ -195,7 +195,7 @@ export function SwitchPicker({
             key={dev}
             checked={value.includes(dev)}
             onChange={(on) => onChange(toggleDevice(value, dev, on))}
-            label={dev}
+            label={SWITCH_DEVICE_SHORT[dev]}
           />
         ))}
       </div>
