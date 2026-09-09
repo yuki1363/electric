@@ -5,6 +5,7 @@ import { generateLvFace } from './lvFace';
 import { generateLvSchedule } from './lvSchedule';
 import { generateNameplate } from './nameplate';
 import { carryOverEdits } from './carryOver';
+import { findOverlaps } from './overlap';
 import { fitDiagram, isTight, scaleLabel } from './fit';
 import type { GenResult } from './types';
 
@@ -12,6 +13,11 @@ import type { GenResult } from './types';
 function fitResult(r: GenResult): GenResult {
   const { diagram, scale, overflow } = fitDiagram(r.diagram);
   const warnings = [...r.warnings];
+  // 単線結線図で図記号や文字が重なっていたら知らせる（表の類は文字を枠内に置くので対象外）
+  if (diagram.kind === 'hv-sld' || diagram.kind === 'lv-sld') {
+    const ov = findOverlaps(diagram);
+    if (ov.length > 0) warnings.push(`図記号や文字が ${ov.length} か所重なっています`);
+  }
   if (overflow) {
     warnings.push(`内容が多く、縮尺 ${scaleLabel(scale)} でも用紙に収まりません。用紙を A3 にするか機器を分けてください`);
   } else if (scale < 1) {

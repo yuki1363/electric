@@ -1,25 +1,13 @@
 import type { BBox } from '../../geom/bbox';
 import { overlaps } from '../../geom/bbox';
-import type { Diagram, TextItem } from '../../model/types';
+import type { Diagram } from '../../model/types';
 import { elementBBox } from '../../layout/builder';
-import { elementLabelLines, type LabelLine } from '../../render/flatten';
-import { estimateTextWidth } from '../../layout/textWidth';
+import { elementLabelLines } from '../../render/flatten';
+import { labelLineBBox, textBBox } from '../../layout/textBox';
 
 export { elementBBox };
+export { labelLineBBox, textBBox };
 
-function textBox(x: number, y: number, text: string, h: number, anchor: 'start' | 'middle' | 'end'): BBox {
-  const w = Math.max(estimateTextWidth(text, h), h);
-  const x0 = anchor === 'middle' ? x - w / 2 : anchor === 'end' ? x - w : x;
-  return { minX: x0, minY: y - h * 0.6, maxX: x0 + w, maxY: y + h * 0.6 };
-}
-
-export function textBBox(t: TextItem): BBox {
-  return textBox(t.x, t.y, t.text, t.h, t.anchor);
-}
-
-export function labelLineBBox(l: LabelLine): BBox {
-  return textBox(l.x, l.y, l.text, l.h, l.anchor);
-}
 
 export function labelBBoxes(el: Parameters<typeof elementLabelLines>[0]): BBox[] {
   return elementLabelLines(el).map(labelLineBBox);

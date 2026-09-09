@@ -6,6 +6,7 @@ import { bboxOfPrims, emptyBBox, inflate, isEmptyBBox, union } from '../geom/bbo
 import { elementLabelPrims, elementPrims } from '../render/flatten';
 import { getSymbol } from '../symbols';
 import { GRID, TEXT, sheetGeom } from './constants';
+import { estimateTextWidth } from './textWidth';
 import { snapValue } from '../geom/point';
 import { dashedRect } from './dashRect';
 import type { GenResult } from './types';
@@ -123,13 +124,39 @@ function buildGroups(hv: HvSpec): Group[] {
  * 高圧受電設備 単線結線図。
  * 母線の分岐が 1 枚に入りきらない場合はページを分ける（縮小しすぎて読めなくなるのを防ぐ）。
  */
+/**
+ * 列の間隔の下限。
+ * 機器名や定格は図記号の右に出るので、いちばん長いラベルが隣の列にかからない幅を確保する。
+ * これをしないと分岐が増えたときに文字どうしが重なる。
+ */
+function neededPitch(hv: HvSpec): number {
+  // 1 行目（機器名）は TEXT.name、2 行目以降は TEXT.rating で描かれる
+  const widths: number[] = [0];
+  const add = (name: string, rest: string[]) => {
+    widths.push(estimateTextWidth(name, TEXT.name));
+    for (const r of rest) widths.push(estimateTextWidth(r, TEXT.rating));
+  };
+  for (const t of hv.transformers) {
+    add(t.name, [`${t.phase} ${t.kva}kVA`, `${t.primary || '6.6kV'}/${t.secondary}`]);
+  }
+  for (const c of hv.capacitors) add(c.name, [`${c.kvar}kvar`]);
+  const widest = Math.max(...widths);
+  // ラベルは図記号の右 (bbox.w/2 + 3) から始まる。
+  // 隣の列は自分の中心から bbox.w/2 だけ左に張り出すので、その手前で終わる幅が要る
+  const half = getSymbol('TR_3PH').bbox.w / 2;
+  const need = half + 3 + widest + 3 + half;
+  return Math.max(BP_MIN, Math.ceil(need / GRID) * GRID);
+}
+
 export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[]): GenResult[] {
   const g = sheetGeom(meta.sheet);
   const groups = buildGroups(hv);
+  const minPitch = neededPitch(hv);
+  const pagePitch = Math.max(BP_DEFAULT, minPitch);
 
   // 1 枚目は受電部があるぶん母線を張れる幅が狭い
   const capacity = (startX: number) =>
-    Math.max(1, Math.floor((g.drawable.x2 - startX - 15) / BP_DEFAULT) + 1);
+    Math.max(1, Math.floor((g.drawable.x2 - startX - 15) / pagePitch) + 1);
   const firstCap = capacity(TX + 20);
   const restCap = capacity(g.drawable.x1 + 20);
 
@@ -158,6 +185,7 @@ export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec
       page: i + 1,
       pageCount,
       id: `hv-sld${pageCount > 1 ? `-p${i + 1}` : ''}`,
+      minPitch,
     }),
   );
   if (pageCount > 1) {
@@ -173,6 +201,8 @@ interface HvPageOpts {
   page: number;
   pageCount: number;
   id: string;
+  /** 列の間隔の下限（いちばん長いラベルが隣にかからない幅） */
+  minPitch: number;
 }
 
 function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: HvPageOpts): GenResult {
@@ -451,8 +481,8 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
   const usableW = g.drawable.x2 - bx0 - 15 - gapCount * GROUP_GAP;
   const bp =
     totalCols > 1
-      ? Math.max(BP_MIN, Math.min(BP_DEFAULT, Math.floor(usableW / (totalCols - 1) / GRID) * GRID))
-      : BP_DEFAULT;
+      ? Math.max(o.minPitch, Math.min(BP_DEFAULT, Math.floor(usableW / (totalCols - 1) / GRID) * GRID))
+      : Math.max(o.minPitch, BP_DEFAULT);
 
   /** 分岐盤の見出し（開閉装置 + CT + OCR）を描く。副母線は全盤で同じ高さ */
   const drawFeederHead = (f: HvSpec['feeders'][number], cx: number, width: number): void => {
