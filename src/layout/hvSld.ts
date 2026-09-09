@@ -689,8 +689,10 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     if (leaf.kind === 'tr' && leaf.node.spec.externalSource) {
       // 母線につながない電源（非常電源盤など）。真上に引き込み線と名前を描く
       const ext = leaf.node.spec.externalSource;
-      const topEl = b.el('INCOMING', cx, topY + 5);
-      b.textLines(cx + 6, topY + 2, [ext.name, ext.ratingText ?? ''].filter(Boolean), TEXT.rating, 'start');
+      // 名前は図記号のラベルとして持たせる（別の文字にすると引込の既定ラベルと重なる）
+      const topEl = b.el('INCOMING', cx, topY + 5, {
+        labels: [ext.name, ext.ratingText ?? ''].filter(Boolean),
+      });
       drawTr(leaf.node, bx, width, topEl, 0);
       return;
     }

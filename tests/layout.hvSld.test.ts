@@ -627,8 +627,7 @@ describe('その他の電源（自由入力）', () => {
     const inc = d.elements.find((e) => e.kind === 'INCOMING' && Math.abs(e.x - tr.x) < 1);
     expect(inc).toBeTruthy();
     expect(inc!.y).toBeLessThan(tr.y);
-    expect(d.texts.some((t) => t.text === '非常電源盤')).toBe(true);
-    expect(d.texts.some((t) => t.text === '600V 600A')).toBe(true);
+    expect(inc!.labels).toEqual(['非常電源盤', '600V 600A']);
     // 母線とはつながらない（同じ列に母線への接続点が無い）
     const busY = Math.max(...d.wires.filter((w) => w.style === 'bus').flatMap((w) => w.points.map((q) => q.y)));
     expect(d.elements.some((e) => e.kind === 'JUNCTION' && Math.abs(e.x - tr.x) < 1 && Math.abs(e.y - busY) < 1)).toBe(
