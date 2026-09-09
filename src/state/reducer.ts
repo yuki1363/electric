@@ -116,8 +116,15 @@ export function reducer(state: AppState, action: Action): AppState {
       if (!state.previewBase) return state;
       return { ...state, history: replace(h, state.previewBase), previewBase: null };
     }
-    case 'UPDATE_ELEMENT':
-      return commit(withDiagram(p, action.diagramId, (d) => ops.updateElement(d, action.id, action.patch)));
+    case 'UPDATE_ELEMENT': {
+      const next = withDiagram(p, action.diagramId, (d) => ops.updateElement(d, action.id, action.patch));
+      // 銘板の中身が変わったときだけ機器銘板表を作り直す対象にする
+      const npOf = (proj: Project) => {
+        const e = proj.diagrams.find((d) => d.id === action.diagramId)?.elements.find((x) => x.id === action.id);
+        return JSON.stringify([e?.nameplate ?? null, e?.nameplateName ?? null]);
+      };
+      return commit(npOf(p) !== npOf(next) ? markStale(next) : next);
+    }
     case 'ADD_ELEMENT':
       return commit(withDiagram(p, action.diagramId, (d) => ops.addElement(d, action.element)));
     case 'INSERT_INTO_WIRE':

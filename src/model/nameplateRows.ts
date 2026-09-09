@@ -1,5 +1,6 @@
 import type { HvSlot, Nameplate, Project } from './types';
 import { deviceKey, deviceLabel, orderDevices } from './switchgear';
+import { getSymbol } from '../symbols';
 import type { SwitchDevice } from './switchgear';
 
 /** 銘板表 1 行分。すべて表示用の文字列に落としてある */
@@ -14,6 +15,8 @@ export interface NameplateRow {
   location: string;
   /** 備考（所属盤・系統） */
   note: string;
+  /** 台数（既定 1） */
+  qty: number;
 }
 
 /** 開閉装置の定格表記。図面ラベルと同じ内容を 6.6kV 系の表記にする */
@@ -32,6 +35,7 @@ function row(deviceName: string, np: Nameplate | undefined, fallbackRating: stri
     serial: np?.serial ?? '',
     location: np?.location ?? '',
     note: np?.note || group,
+    qty: np?.qty && np.qty > 1 ? np.qty : 1,
   };
 }
 
@@ -133,6 +137,18 @@ export function nameplateRows(project: Project): NameplateRow[] {
         p.name,
       ),
     );
+  }
+
+  // 図面で手で足した機器の銘板。
+  // 自動作図の機器は仕様側から出しているので、ここでは origin === 'manual' だけを見る（二重に出さない）
+  for (const d of project.diagrams) {
+    for (const el of d.elements) {
+      if (el.origin !== 'manual') continue;
+      if (!el.nameplate || Object.values(el.nameplate).every((v) => v === undefined || v === '')) continue;
+      out.push(
+        row(el.nameplateName || getSymbol(el.kind).nameJa, el.nameplate, el.labels[0] ?? '', d.title),
+      );
+    }
   }
 
   for (const e of project.extraNameplates ?? []) {

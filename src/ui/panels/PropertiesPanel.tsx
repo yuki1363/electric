@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { Diagram, Element, TextItem, Wire } from '../../model/types';
+import type { Diagram, Element, Nameplate, TextItem, Wire } from '../../model/types';
 import type { Rot } from '../../symbols/transform';
 import { getSymbol } from '../../symbols';
-import { GRID } from '../../layout/constants';
-import { snapValue } from '../../geom/point';
 import { useDispatch } from '../../state/context';
 import type { AlignMode } from '../../state/diagramOps';
 import { NumberField, Row, SelectField, TextField } from '../fields';
+import { NameplateDisclosure } from '../forms/NameplateFields';
 
 export function PropertiesPanel({
   diagram,
@@ -114,6 +113,12 @@ function LabelsEditor({ value, onCommit }: { value: string[]; onCommit: (lines: 
   );
 }
 
+/** 空欄だけの銘板は持たない（触っただけで「要更新」が点かないように） */
+function cleanNameplate(np: Nameplate): Nameplate | undefined {
+  const out = Object.fromEntries(Object.entries(np).filter(([, v]) => v !== undefined && v !== ''));
+  return Object.keys(out).length > 0 ? (out as Nameplate) : undefined;
+}
+
 function ElementProps({ diagram, el, onDelete }: { diagram: Diagram; el: Element; onDelete: () => void }) {
   const dispatch = useDispatch();
   const def = getSymbol(el.kind);
@@ -122,8 +127,8 @@ function ElementProps({ diagram, el, onDelete }: { diagram: Diagram; el: Element
     <div className="props">
       <h3>{def.nameJa}</h3>
       <Row label="X / Y (mm)">
-        <NumberField value={el.x} step={GRID} width={60} onCommit={(v) => patch({ x: snapValue(v ?? el.x, GRID) })} />
-        <NumberField value={el.y} step={GRID} width={60} onCommit={(v) => patch({ y: snapValue(v ?? el.y, GRID) })} />
+        <NumberField value={el.x} step={1} width={60} onCommit={(v) => patch({ x: v ?? el.x })} />
+        <NumberField value={el.y} step={1} width={60} onCommit={(v) => patch({ y: v ?? el.y })} />
       </Row>
       <Row label="回転">
         {([0, 90, 180, 270] as Rot[]).map((r) => (
@@ -139,6 +144,32 @@ function ElementProps({ diagram, el, onDelete }: { diagram: Diagram; el: Element
         <Row label="ラベル位置">
           <button onClick={() => patch({ labelOffset: undefined })}>既定位置に戻す</button>
         </Row>
+      )}
+      {el.origin === 'manual' ? (
+        <>
+          <Row label="銘板の機器名称">
+            <TextField
+              value={el.nameplateName ?? ''}
+              width={140}
+              onCommit={(v) => patch({ nameplateName: v || undefined })}
+            />
+            <span className="muted small">空なら「{def.nameJa}」</span>
+          </Row>
+          <NameplateDisclosure
+            label="入力すると機器銘板表に 1 行として出ます（図面を再生成すると表に反映されます）"
+            value={el.nameplate}
+            onChange={(np) => patch({ nameplate: cleanNameplate(np) })}
+          />
+          {el.nameplate?.model && !el.labels.includes(el.nameplate.model) && (
+            <div className="btn-row">
+              <button onClick={() => patch({ labels: [...el.labels, el.nameplate!.model!] })}>型式をラベルに追加</button>
+            </div>
+          )}
+        </>
+      ) : (
+        <p className="muted small">
+          自動作図した機器です。銘板は「仕様入力」タブで入力してください（二重に出さないため）。
+        </p>
       )}
       {el.props && Object.keys(el.props).length > 0 && (
         <Row label="仕様">

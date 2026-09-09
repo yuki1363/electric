@@ -45,6 +45,8 @@ export interface Nameplate {
   location?: string;
   /** 備考 */
   note?: string;
+  /** 台数（未設定＝1 台）。VT・CT が 2 台組のときなどに使う */
+  qty?: number;
 }
 
 /** 受電盤内の機器スロット（真偽値で持っている機器に銘板を紐付けるためのキー） */

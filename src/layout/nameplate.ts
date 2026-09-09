@@ -8,13 +8,14 @@ import type { GenResult } from './types';
 
 const COLS: { key: keyof NameplateRow; title: string; w: number; align: 'start' | 'middle' | 'end' }[] = [
   { key: 'deviceName', title: '機器名称', w: 32, align: 'start' },
-  { key: 'model', title: '型式', w: 44, align: 'start' },
-  { key: 'ratingText', title: '定格容量', w: 52, align: 'start' },
-  { key: 'maker', title: '製造者', w: 34, align: 'start' },
+  { key: 'model', title: '型式', w: 42, align: 'start' },
+  { key: 'ratingText', title: '定格容量', w: 50, align: 'start' },
+  { key: 'qty', title: '数量', w: 12, align: 'middle' },
+  { key: 'maker', title: '製造者', w: 32, align: 'start' },
   { key: 'madeOn', title: '製造年月', w: 24, align: 'middle' },
   { key: 'serial', title: '製造番号', w: 32, align: 'start' },
-  { key: 'location', title: '使用箇所', w: 32, align: 'start' },
-  { key: 'note', title: '備考', w: 47, align: 'start' },
+  { key: 'location', title: '使用箇所', w: 30, align: 'start' },
+  { key: 'note', title: '備考', w: 43, align: 'start' },
 ];
 const TABLE_X = 20;
 const TABLE_Y = 42;
@@ -41,6 +42,8 @@ export function generateNameplate(project: Project, meta: ProjectMeta = project.
   const widths = COLS.map((c) => c.w * scale);
 
   const rows = nameplateRows(project);
+  /** 見出しの台数は数量を合算する */
+  const totalQty = rows.reduce((n, r) => n + r.qty, 0);
   const rowsPerPage = Math.max(1, Math.floor((g.drawable.y2 - TABLE_Y - HEADER_H - 6) / ROW_H));
   const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const results: GenResult[] = [];
@@ -51,7 +54,7 @@ export function generateNameplate(project: Project, meta: ProjectMeta = project.
     const pageRows = rows.slice((page - 1) * rowsPerPage, page * rowsPerPage);
 
     b.text(g.drawable.x1 + 5, 30, '機器銘板表', TEXT.title, 'start');
-    b.text(g.drawable.x2, 30, `${meta.name}　全 ${rows.length} 台`, TEXT.rating, 'end');
+    b.text(g.drawable.x2, 30, `${meta.name}　全 ${totalQty} 台`, TEXT.rating, 'end');
 
     const x1 = TABLE_X;
     const x2 = TABLE_X + widths.reduce((s, w) => s + w, 0);
@@ -75,7 +78,8 @@ export function generateNameplate(project: Project, meta: ProjectMeta = project.
       let x = x1;
       widths.forEach((w, ci) => {
         const col = COLS[ci]!;
-        const raw = r[col.key];
+        // 数量は 1 台なら書かない（既定なので表が読みやすい）
+        const raw = col.key === 'qty' ? (r.qty > 1 ? String(r.qty) : '') : (r[col.key] as string);
         if (raw) {
           const text = fitText(raw, TEXT.body, w - 3);
           const tx = col.align === 'start' ? x + 1.5 : col.align === 'end' ? x + w - 1.5 : x + w / 2;

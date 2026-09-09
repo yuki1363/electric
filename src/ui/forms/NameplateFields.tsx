@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import type { Nameplate } from '../../model/types';
-import { TextField } from '../fields';
+import { NumberField, TextField } from '../fields';
 
-const FIELDS: { key: keyof Nameplate; label: string; width: number }[] = [
+type TextKey = Exclude<keyof Nameplate, 'qty'>;
+
+const FIELDS: { key: TextKey; label: string; width: number }[] = [
   { key: 'model', label: '型式', width: 150 },
   { key: 'ratingText', label: '定格容量', width: 170 },
   { key: 'maker', label: '製造者', width: 120 },
@@ -27,12 +29,21 @@ export function NameplateFields({
         <label key={f.key}>
           <span>{f.label}</span>
           <TextField
-            value={np[f.key] ?? ''}
+            value={(np[f.key] as string | undefined) ?? ''}
             width={f.width}
             onCommit={(v) => onChange({ ...np, [f.key]: v || undefined })}
           />
         </label>
       ))}
+      <label title="同じ機器が複数台あるときの台数。1 台なら空のままで構いません">
+        <span>数量</span>
+        <NumberField
+          value={np.qty ?? 1}
+          width={50}
+          min={1}
+          onCommit={(v) => onChange({ ...np, qty: v && v > 1 ? v : undefined })}
+        />
+      </label>
     </div>
   );
 }
