@@ -25,6 +25,11 @@ export interface ProjectMeta {
   sheet: SheetSpec;
   /** 図面上の機器ラベルに型式を併記する */
   showModels?: boolean;
+  /**
+   * 仕様から図面を自動作図する（既定 true）。
+   * false にすると決まった形に作り直す動作をやめ、図面は手描きのものだけになる。
+   */
+  autoGenerate?: boolean;
 }
 
 // ---------------------------------------------------------------- 銘板
@@ -176,6 +181,8 @@ export interface TransformerSpec {
    * 母線につながず、変圧器の真上に引き込み線と名前を描く。
    */
   externalSource?: { name: string; ratingText?: string };
+  /** 二次側に付ける計器（CT を置いて電流計、VT を置いて電圧計） */
+  secondaryMetering?: PanelMetering;
   /** 変圧器本体の銘板 */
   nameplate?: Nameplate;
   /** 開閉装置ごとの銘板。キーは機器名の小文字（lbs / pf / vcs / vcb / pc） */
@@ -199,6 +206,18 @@ export interface CapacitorSpec {
   nameplates?: Record<string, Nameplate>;
 }
 
+/**
+ * 分岐盤・変圧器二次に付ける計器。
+ * 電流計は CT 二次、電圧計は盤に置いた VT の二次から取る。
+ * as / vs は計器の手前に入れる切換開閉器（既定は付けない）。
+ */
+export interface PanelMetering {
+  a?: boolean;
+  v?: boolean;
+  as?: boolean;
+  vs?: boolean;
+}
+
 /** 高圧分岐盤（母線から分岐するフィーダー） */
 export interface HvFeederSpec {
   id: Id;
@@ -218,7 +237,7 @@ export interface HvFeederSpec {
   /** 保護継電器。未設定なら ocr から移行する */
   relays?: RelayKind[];
   /** 盤に付ける計器。電流計は CT 二次、電圧計は盤に置いた VT から取る */
-  metering?: { a?: boolean; v?: boolean };
+  metering?: PanelMetering;
   cable?: { type: string; sq: number; lengthM?: number };
   /** 負荷名（配下に機器を置かない場合の行き先表示） */
   loadName?: string;

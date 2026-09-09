@@ -131,3 +131,86 @@ describe('高圧ケーブルの図記号', () => {
     expect(def.prims.filter((x) => x.t === 'polyline').length).toBe(2);
   });
 });
+
+describe('AS・VS と変圧器二次の計器', () => {
+  it('分岐盤の AS は電流計の手前に直列で入る', () => {
+    const d = draw(feeder({ metering: { a: true, as: true } }));
+    const as = lastOf(d, 'AS');
+    const a = lastOf(d, 'METER_A');
+    const ocr = lastOf(d, 'OCR');
+    expect(as.y).toBe(a.y);
+    expect(ocr.x).toBeLessThan(as.x);
+    expect(as.x).toBeLessThan(a.x);
+    expect(
+      d.wires.some((w) => isPortEnd(w.from) && w.from.elementId === as.id && isPortEnd(w.to) && w.to.elementId === a.id),
+    ).toBe(true);
+  });
+
+  it('分岐盤の VS は電圧計の手前に入る', () => {
+    const d = draw(feeder({ metering: { v: true, vs: true } }));
+    const vs = lastOf(d, 'VS');
+    const v = lastOf(d, 'METER_V');
+    expect(vs.x).toBeLessThan(v.x);
+    expect(
+      d.wires.some((w) => isPortEnd(w.from) && w.from.elementId === vs.id && isPortEnd(w.to) && w.to.elementId === v.id),
+    ).toBe(true);
+    expect(findOverlaps(d)).toEqual([]);
+  });
+
+  it('変圧器の二次側に CT を入れて電流計・電圧計を付けられる', () => {
+    const hv: HvSpec = {
+      ...p.hv,
+      feeders: [],
+      capacitors: [],
+      transformers: [
+        {
+          ...p.hv.transformers[0]!,
+          secondaryMetering: { a: true, v: true, as: true, vs: true },
+        },
+      ],
+    };
+    const d = generateHvSld(hv, p.meta, p.panels)[0]!.diagram;
+    const tr = d.elements.find((e) => e.labels[0] === 'Tr-1')!;
+    const ct = lastOf(d, 'CT');
+    // 二次側（変圧器の下）に CT が入る
+    expect(ct.y).toBeGreaterThan(tr.y);
+    expect(ct.x).toBe(tr.x);
+    for (const k of ['AS', 'METER_A', 'VT', 'VS', 'METER_V']) {
+      expect(lastOf(d, k).y, k).toBe(ct.y);
+    }
+    // 負荷矢印は計器より下に下がる
+    const arrow = d.elements.find((e) => e.kind === 'LOAD_ARROW')!;
+    expect(arrow.y).toBeGreaterThan(ct.y);
+    expect(findOverlaps(d)).toEqual([]);
+  });
+
+  it('二次側に変圧器がつながっている場合は警告する', () => {
+    const hv: HvSpec = {
+      ...p.hv,
+      feeders: [],
+      capacitors: [],
+      transformers: [
+        { ...p.hv.transformers[0]!, id: 't1', name: 'Tr-A', secondaryMetering: { a: true } },
+        { ...p.hv.transformers[0]!, id: 't2', name: 'Tr-B', sourceTransformerId: 't1' },
+      ],
+    };
+    const r = generateHvSld(hv, p.meta, p.panels)[0]!;
+    expect(r.warnings.some((w) => w.includes('二次側の計器は描けません'))).toBe(true);
+  });
+
+  it('銘板表に AS・VS と二次側の計器が出る', () => {
+    const hv: HvSpec = {
+      ...p.hv,
+      feeders: [feeder({ metering: { a: true, v: true, as: true, vs: true } })],
+      capacitors: [],
+      transformers: [{ ...p.hv.transformers[0]!, secondaryMetering: { a: true } }],
+    };
+    const rows = nameplateRows({ ...p, hv });
+    const fnames = rows.filter((r) => r.note === '高圧分岐盤No.1').map((r) => r.deviceName);
+    expect(fnames).toContain('AS');
+    expect(fnames).toContain('VS');
+    const tnames = rows.filter((r) => r.note === 'Tr-1').map((r) => r.deviceName);
+    expect(tnames).toContain('CT');
+    expect(tnames).toContain('A');
+  });
+});

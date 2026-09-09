@@ -63,6 +63,7 @@ export function Shell({ state }: { state: AppState }) {
 
   const anyStale = project.diagrams.some((d) => d.stale);
   const anyEdited = project.diagrams.some((d) => d.edited);
+  const autoGenerate = project.meta.autoGenerate !== false;
 
   const loadProject = (p: Project) => dispatch({ type: 'LOAD_PROJECT', project: p });
 
@@ -144,17 +145,21 @@ export function Shell({ state }: { state: AppState }) {
           <button disabled={!canRedo(state.history)} onClick={() => dispatch({ type: 'REDO' })} title="Ctrl+Y">
             やり直す
           </button>
-          <span className="sep" />
-          <button
-            className={anyStale ? 'primary' : ''}
-            onClick={() => {
-              if (anyEdited && !confirm(REGEN_CONFIRM)) return;
-              dispatch({ type: 'REGENERATE' });
-            }}
-            title={REGEN_TITLE}
-          >
-            図面を再生成{anyStale ? ' *' : ''}
-          </button>
+          {autoGenerate && (
+            <>
+              <span className="sep" />
+              <button
+                className={anyStale ? 'primary' : ''}
+                onClick={() => {
+                  if (anyEdited && !confirm(REGEN_CONFIRM)) return;
+                  dispatch({ type: 'REGENERATE' });
+                }}
+                title={REGEN_TITLE}
+              >
+                図面を再生成{anyStale ? ' *' : ''}
+              </button>
+            </>
+          )}
         </div>
         {message && <div className="message">{message}</div>}
         {state.warnings.length > 0 && <div className="warnings" title={state.warnings.join('\n')}>{state.warnings[0]}{state.warnings.length > 1 ? ` 他${state.warnings.length - 1}件` : ''}</div>}
@@ -204,6 +209,7 @@ export function Shell({ state }: { state: AppState }) {
           <aside className="side left">
             <DiagramList
               diagrams={project.diagrams}
+              autoGenerate={autoGenerate}
               activeId={activeDiagramId}
               onSelect={(id) => {
                 setActiveDiagramId(id);
@@ -238,7 +244,12 @@ export function Shell({ state }: { state: AppState }) {
           )}
           {active && (
             <aside className="side right">
-              <PropertiesPanel diagram={active} selection={selection} onSelectionChange={setSelection} />
+              <PropertiesPanel
+                diagram={active}
+                selection={selection}
+                onSelectionChange={setSelection}
+                autoGenerate={autoGenerate}
+              />
             </aside>
           )}
         </main>

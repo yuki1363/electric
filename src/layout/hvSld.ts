@@ -1,4 +1,4 @@
-import type { Element, HvSlot, HvSpec, LvPanelSpec, ProjectMeta } from '../model/types';
+import type { Element, HvSlot, HvSpec, LvPanelSpec, PanelMetering, ProjectMeta } from '../model/types';
 import { deviceKey, deviceLabel, deviceSymbol, orderDevices, type SwitchDevice } from '../model/switchgear';
 import { trConnectionText, trSymbolKind } from '../model/transformer';
 import { RELAY_CIRCUIT, orderRelays, relayKey, relaySymbolKind, type RelayKind } from '../model/relay';
@@ -154,13 +154,22 @@ function neededPitch(hv: HvSpec): number {
   // 配下が 2 台以上ある盤は区画自体が広いので余裕があり、1 列しか使わない盤だけ気にすればよい
   const leavesOf = (id: string) =>
     hv.transformers.filter((t) => t.feederId === id).length + hv.capacitors.filter((c) => c.feederId === id).length;
+  /** CT の右へ伸びる計器の列がどこまで張り出すか */
+  const rowWidth = (m: PanelMetering | undefined, relays = 0) => {
+    const n = relays + (m?.a ? 1 : 0) + (m?.a && m.as ? 1 : 0);
+    const v = m?.v ? (m.vs ? 100 : 70) : 0;
+    return 30 + n * 30 + v + 10;
+  };
   const headNeed = Math.max(
     0,
     ...hv.feeders.map((f) => {
       if (!f.ct || leavesOf(f.id) > 1) return 0;
-      const n = orderRelays(f.relays ?? (f.ocr ? ['OCR'] : [])).length + (f.metering?.a ? 1 : 0);
-      return 30 + n * 30 + (f.metering?.v ? 40 : 0) + 10;
+      return rowWidth(f.metering, orderRelays(f.relays ?? (f.ocr ? ['OCR'] : [])).length);
     }),
+    // 変圧器の二次側の計器も同じ幅を使う
+    ...hv.transformers.map((t) =>
+      t.secondaryMetering?.a || t.secondaryMetering?.v ? rowWidth(t.secondaryMetering) : 0,
+    ),
   );
   return Math.max(BP_MIN, Math.ceil(Math.max(need, headNeed) / GRID) * GRID);
 }
@@ -540,6 +549,56 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       ? Math.max(o.minPitch, Math.min(BP_DEFAULT, Math.floor(usableW / (totalCols - 1) / GRID) * GRID))
       : Math.max(o.minPitch, BP_DEFAULT);
 
+  /**
+   * CT の右へ計器を横一列に並べる（分岐盤・変圧器二次で共通）。
+   * 継電器 → AS → A を CT 二次に直列でつなぎ、電圧計は VT を立ててその二次から取る。
+   * 戻り値は使った右端の x。
+   */
+  const drawMeterRow = (
+    ct: Element,
+    vTap: Element | null,
+    relays: RelayKind[],
+    m: PanelMetering | undefined,
+    np: (k: string) => { model?: string } | undefined,
+  ): number => {
+    let rx = ct.x + 30;
+    let prev: Element = ct;
+    let prevPort = 'E';
+    /** CT 二次の直列に 1 台足す */
+    const chain = (kind: SK, labels: string[] = []) => {
+      const el = b.el(kind, rx, ct.y, { labels });
+      b.wire(prev, prevPort, el, 'W', 'control');
+      prev = el;
+      prevPort = 'E';
+      rx += 30;
+      return el;
+    };
+    for (const r of relays) chain(relaySymbolKind(r));
+    if (m?.a) {
+      if (m.as) chain('AS', withModel([], np('as')));
+      chain('METER_A', withModel([], np('meterA')));
+    }
+    if (vTap) {
+      const vt = b.el('VT', rx + 5, ct.y, { labels: withModel(['VT'], np('vt')) });
+      b.wire(vTap, 'E', vt, 'N');
+      const vbus = ct.y + 15;
+      const vs = m?.vs ? b.el('VS', rx + 35, ct.y, { labels: withModel([], np('vs')) }) : null;
+      const v = b.el('METER_V', rx + (vs ? 65 : 35), ct.y, { labels: withModel([], np('meterV')) });
+      if (vs) b.wire(vs, 'E', v, 'W', 'control');
+      // VT 二次の横母線から計器を引き下げる
+      const left = vs ? vs.x : v.x;
+      b.wireToPoint(vt, 'S', { x: vt.x, y: vbus }, 'control');
+      b.wirePoints({ x: vt.x, y: vbus }, { x: left, y: vbus }, 'control');
+      b.wireToPoint(vs ?? v, 'S', { x: left, y: vbus }, 'control');
+      if (vs) {
+        b.el('JUNCTION', left, vbus);
+        b.wireToPoint(v, 'S', { x: v.x, y: vbus }, 'control');
+      }
+      rx = v.x + 15;
+    }
+    return rx;
+  };
+
   /** 分岐盤の見出し（開閉装置 + CT + OCR）を描く。副母線は全盤で同じ高さ */
   const drawFeederHead = (f: HvSpec['feeders'][number], cx: number, width: number): void => {
     const fnp = (k: string) => f.nameplates?.[k];
@@ -576,35 +635,11 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       yy += 20;
       const ctLines = withModel([`CT ${f.ctRatio ?? ''}`.trim()], fnp('ct'));
       const fRelays = orderRelays(f.relays ?? (f.ocr ? ['OCR'] : []));
-      let rx = cx + 30;
-      let prev: Element = ct;
-      let prevPort = 'E';
-      /** CT 二次の直列に 1 台足す */
-      const chain = (kind: SK, labels: string[] = []) => {
-        const el = b.el(kind, rx, ct.y, { labels });
-        b.wire(prev, prevPort, el, 'W', 'control');
-        prev = el;
-        prevPort = 'E';
-        rx += 30;
-        return el;
-      };
-      for (const r of fRelays) chain(relaySymbolKind(r));
-      // 電流計は CT 二次の直列の末尾に入れる
-      if (f.metering?.a) chain('METER_A', withModel([], fnp('meterA')));
+      drawMeterRow(ct, vTap, fRelays, f.metering, fnp);
       if (fRelays.length > 0 || f.metering?.a) {
         b.textLines(cx + 30, ct.y + 9, ctLines, TEXT.rating, 'middle');
       } else {
         b.textLines(cx + 3, ct.y + 9, ctLines, TEXT.rating, 'start');
-      }
-
-      // 電圧計。主回路から VT を取り、その二次に V をつなぐ
-      if (vTap) {
-        const vt = b.el('VT', rx + 5, ct.y, { labels: withModel(['VT'], fnp('vt')) });
-        b.wire(vTap, 'E', vt, 'N');
-        const v = b.el('METER_V', rx + 35, ct.y, { labels: withModel([], fnp('meterV')) });
-        b.wireToPoint(vt, 'S', { x: vt.x, y: ct.y + 15 }, 'control');
-        b.wirePoints({ x: vt.x, y: ct.y + 15 }, { x: v.x, y: ct.y + 15 }, 'control');
-        b.wireToPoint(v, 'S', { x: v.x, y: ct.y + 15 }, 'control');
       }
     } else if (f.metering?.a || wantV) {
       b.warn(`${f.name}: 計器は CT の二次から取るため、CT を有効にしてください`);
@@ -686,19 +721,38 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     });
     b.wire(last, 'S', tr, 'N');
 
-    const yTap = baseYs[level]! + 15;
     const panel = panels.find((p) => p.id === t.feeds);
     const feedLabel = panel ? `${panel.name} へ` : '低圧負荷へ';
 
+    // 二次側の計器。CT を二次線に入れ、その右へ横一列に並べる
+    const sm = t.secondaryMetering;
+    const wantSec = sm?.a === true || sm?.v === true;
+    let below: Element = tr;
+    let yTap = baseYs[level]! + 15;
+    if (wantSec && node.children.length > 0) {
+      b.warn(`${t.name}: 二次側に変圧器がつながっているため、二次側の計器は描けません`);
+    } else if (wantSec) {
+      const tnp = (k: string) => t.nameplates?.[k];
+      const vTap2 = sm!.v ? b.el('JUNCTION', cx, baseYs[level]! + 15) : null;
+      if (vTap2) b.wire(tr, 'S', vTap2, 'N');
+      const ct2 = b.el('CT', cx, baseYs[level]! + 25, { labels: [] });
+      b.wire(vTap2 ?? tr, 'S', ct2, 'N');
+      // ラベルは CT の外形と負荷矢印のあいだ（縦線の右）に置く
+      b.textLines(cx + 13, ct2.y + 12, withModel(['CT'], tnp('ct')), TEXT.rating, 'start');
+      drawMeterRow(ct2, vTap2, [], sm, tnp);
+      below = ct2;
+      yTap = baseYs[level]! + 45;
+    }
+
     if (node.children.length === 0) {
       const arrow = b.el('LOAD_ARROW', cx, yTap + 5, { labels: [feedLabel] });
-      b.wire(tr, 'S', arrow, 'N');
+      b.wire(below, 'S', arrow, 'N');
       return;
     }
 
     // 二次側に変圧器がぶら下がる（低圧 → 低圧）
     const j2 = b.el('JUNCTION', cx, yTap);
-    b.wire(tr, 'S', j2, 'N');
+    b.wire(below, 'S', j2, 'N');
     const widths = node.children.map((c) => leafColumns({ kind: 'tr', node: c }));
     const centers: number[] = [];
     let cxi = x;

@@ -29,6 +29,17 @@ export function ProjectMetaForm({ meta }: { meta: ProjectMeta }) {
           label="機器ラベルに型式を併記する"
         />
       </Row>
+      <Row label="自動作図">
+        <CheckField
+          checked={meta.autoGenerate !== false}
+          onChange={(v) => set({ autoGenerate: v })}
+          label="仕様から図面を作る"
+        />
+        <span className="muted small">
+          外すと決まった形に作り直す動作をやめます。今ある図面はそのまま手描きの図面として残り、
+          「図面を再生成」も出なくなります
+        </span>
+      </Row>
       <Row label="用紙">
         <SelectField
           value={meta.sheet.size}

@@ -83,6 +83,19 @@ export function regenerateAll(project: Project, existing: Diagram[] = project.di
   };
 }
 
+/**
+ * 機器銘板表だけを作り直す（自動作図を切っているとき用）。
+ * 単線結線図などには触らず、図面に置かれた機器から表を組み立て直す。
+ */
+export function regenerateNameplateOnly(project: Project): RegenerateResult {
+  const results = mergeDiagrams(project.diagrams, generateNameplate(project)).map(fitResult);
+  const others = project.diagrams.filter((d) => d.kind !== 'nameplate');
+  return {
+    diagrams: [...others, ...results.map((r) => r.diagram)],
+    warnings: results.flatMap((r) => r.warnings.map((w) => `[${r.diagram.title}] ${w}`)),
+  };
+}
+
 /** 生成し直した図面（等倍）へ、同 id の既存図面の手作業を載せ替える */
 export function mergeDiagrams(existing: Diagram[], generated: GenResult[]): GenResult[] {
   return generated.map((r) => {

@@ -1,5 +1,6 @@
 import type { Diagram } from '../../model/types';
 import { useDispatch } from '../../state/context';
+import { newId } from '../../model/ids';
 
 export const REGEN_TITLE =
   '仕様から全図面を作り直します（手で足した機器・配線・文字、銘板、ラベル位置、手直しした配線経路は残ります）';
@@ -14,16 +15,20 @@ export function DiagramList({
   diagrams,
   activeId,
   onSelect,
+  autoGenerate = true,
 }: {
   diagrams: Diagram[];
   activeId: string;
   onSelect: (id: string) => void;
+  /** false のときは自動作図の操作（再生成）を出さない */
+  autoGenerate?: boolean;
 }) {
   const dispatch = useDispatch();
   const anyStale = diagrams.some((d) => d.stale);
   const anyEdited = diagrams.some((d) => d.edited);
   const regenAll = () => {
-    if (anyEdited && !confirm(REGEN_CONFIRM)) return;
+    // 自動作図を切っているときは銘板表しか作り直さないので、確認は要らない
+    if (autoGenerate && anyEdited && !confirm(REGEN_CONFIRM)) return;
     dispatch({ type: 'REGENERATE' });
   };
   return (
@@ -32,16 +37,31 @@ export function DiagramList({
         <strong>図面一覧</strong>
         <button
           title="仕様に紐づかない白紙の図面を足す（作り直しの対象にならない）"
-          onClick={() => dispatch({ type: 'ADD_DIAGRAM', title: `図面 ${diagrams.length + 1}`, afterId: activeId })}
+          onClick={() => {
+            // 足した図面をそのまま開く（前の図面に描いてしまわないように）
+            const id = newId('dg');
+            dispatch({ type: 'ADD_DIAGRAM', id, title: `図面 ${diagrams.length + 1}`, afterId: activeId });
+            onSelect(id);
+          }}
         >
           + 白紙
         </button>
-        <button className={anyStale ? 'primary' : ''} onClick={regenAll} title={REGEN_TITLE}>
-          全て再生成
+        <button
+          className={anyStale ? 'primary' : ''}
+          onClick={regenAll}
+          title={
+            autoGenerate
+              ? REGEN_TITLE
+              : '図面に置かれた機器の銘板から、機器銘板表を作り直します（単線結線図には触りません）'
+          }
+        >
+          {autoGenerate ? '全て再生成' : '銘板表を更新'}
         </button>
       </div>
       {diagrams.length === 0 && (
-        <p className="muted">図面がありません。仕様を入力して再生成するか、「+ 白紙」で描き始めてください。</p>
+        <p className="muted">
+          図面がありません。{autoGenerate ? '仕様を入力して再生成するか、' : ''}「+ 白紙」で描き始めてください。
+        </p>
       )}
       <ul>
         {diagrams.map((d) => (
@@ -58,7 +78,11 @@ export function DiagramList({
             <button
               className="small"
               title="この図面を複製する（写しは仕様から切り離され、自由に描ける）"
-              onClick={() => dispatch({ type: 'DUPLICATE_DIAGRAM', diagramId: d.id })}
+              onClick={() => {
+                const id = newId('dg');
+                dispatch({ type: 'DUPLICATE_DIAGRAM', diagramId: d.id, newId: id });
+                onSelect(id);
+              }}
             >
               ⧉
             </button>
@@ -72,6 +96,15 @@ export function DiagramList({
             >
               ✎
             </button>
+            {d.kind !== 'free' && (
+              <button
+                className="small"
+                title="この図面を仕様から切り離す（絵はそのまま。以後 作り直しの対象になりません）"
+                onClick={() => dispatch({ type: 'RELEASE_DIAGRAM', diagramId: d.id })}
+              >
+                ⛓
+              </button>
+            )}
             {d.kind === 'free' ? (
               <button
                 className="small"
@@ -85,13 +118,15 @@ export function DiagramList({
                 ✕
               </button>
             ) : (
-              <button
-                className="small"
-                title="この図面だけ仕様から作り直す（手で足したものは残ります）"
-                onClick={() => dispatch({ type: 'REGENERATE_ONE', diagramId: d.id })}
-              >
-                ↻
-              </button>
+              autoGenerate && (
+                <button
+                  className="small"
+                  title="この図面だけ仕様から作り直す（手で足したものは残ります）"
+                  onClick={() => dispatch({ type: 'REGENERATE_ONE', diagramId: d.id })}
+                >
+                  ↻
+                </button>
+              )
             )}
           </li>
         ))}

@@ -47,6 +47,10 @@ function row(deviceName: string, np: Nameplate | undefined, fallbackRating: stri
  * 銘板が未入力の機器も、定格だけは仕様から埋めて一覧に出す。
  */
 export function nameplateRows(project: Project): NameplateRow[] {
+  // 自動作図を切っているときは図面が正。図面に置かれた機器だけから表を作る
+  if (project.meta.autoGenerate === false) {
+    return [...diagramRows(project), ...extraRows(project)];
+  }
   const out = hvRows(project.hv, '');
   for (const sub of project.substations ?? []) out.push(...hvRows(sub.hv, `${sub.name} `));
   return [...out, ...panelRows(project), ...diagramRows(project), ...extraRows(project)];
@@ -114,9 +118,13 @@ function hvRows(hv: Project['hv'], prefix: string): NameplateRow[] {
       for (const r of orderRelays(f.relays ?? (f.ocr ? ['OCR'] : []))) {
         out.push(row(RELAY_SHORT[r], fnp(relayKey(r)), '', g(f.name)));
       }
-      if (f.metering?.a) out.push(row('A', fnp('meterA'), '', g(f.name)));
+      if (f.metering?.a) {
+        if (f.metering.as) out.push(row('AS', fnp('as'), '', g(f.name)));
+        out.push(row('A', fnp('meterA'), '', g(f.name)));
+      }
       if (f.metering?.v) {
         out.push(row('VT', fnp('vt'), '6600/110V', g(f.name)));
+        if (f.metering.vs) out.push(row('VS', fnp('vs'), '', g(f.name)));
         out.push(row('V', fnp('meterV'), '', g(f.name)));
       }
       if (f.cable) {
@@ -125,7 +133,7 @@ function hvRows(hv: Project['hv'], prefix: string): NameplateRow[] {
             '高圧ケーブル',
             fnp('cable'),
             `${f.cable.type} ${f.cable.sq}sq${f.cable.lengthM ? ` ${f.cable.lengthM}m` : ''}`,
-            f.name,
+            g(f.name),
           ),
         );
       }
@@ -137,6 +145,20 @@ function hvRows(hv: Project['hv'], prefix: string): NameplateRow[] {
       }
       const conn = trConnectionText(t);
       const src = t.externalSource;
+      const sm = t.secondaryMetering;
+      if (sm?.a || sm?.v) {
+        const tnp = (k: string) => t.nameplates?.[k];
+        out.push(row('CT', tnp('ct'), '二次側', g(t.name)));
+        if (sm.a) {
+          if (sm.as) out.push(row('AS', tnp('as'), '', g(t.name)));
+          out.push(row('A', tnp('meterA'), '', g(t.name)));
+        }
+        if (sm.v) {
+          out.push(row('VT', tnp('vt'), '', g(t.name)));
+          if (sm.vs) out.push(row('VS', tnp('vs'), '', g(t.name)));
+          out.push(row('V', tnp('meterV'), '', g(t.name)));
+        }
+      }
       out.push(
         row(
           'Tr',
@@ -175,12 +197,19 @@ function panelRows(project: Project): NameplateRow[] {
   return out;
 }
 
-/** 図面で手で足した機器の銘板。自動作図の機器は仕様側から出すので二重に出さない */
+/**
+ * 図面に置かれた機器の銘板。
+ * 自動作図が有効なときは、仕様側から出る機器と二重にならないよう
+ * 手で足したもの（origin: 'manual'）と仕様に紐づかない図面のものだけを見る。
+ * 自動作図を切っているときは図面が正なので、銘板が入っている機器はすべて出す。
+ */
 function diagramRows(project: Project): NameplateRow[] {
   const out: NameplateRow[] = [];
+  const fromDrawingOnly = project.meta.autoGenerate === false;
   for (const d of project.diagrams) {
+    if (d.kind === 'nameplate') continue;
     for (const el of d.elements) {
-      if (el.origin !== 'manual') continue;
+      if (!fromDrawingOnly && el.origin !== 'manual' && d.kind !== 'free') continue;
       if (!el.nameplate || Object.values(el.nameplate).every((v) => v === undefined || v === '')) continue;
       out.push(
         row(el.nameplateName || getSymbol(el.kind).nameJa, el.nameplate, el.labels[0] ?? '', d.title),

@@ -1,9 +1,8 @@
 import type { Diagram, Project } from '../model/types';
-import { regenerateAll } from '../layout';
+import { regenerateAll, regenerateNameplateOnly } from '../layout';
 import type { Action } from './actions';
 import * as ops from './diagramOps';
 import { createHistory, push, redo, replace, undo, type History } from './history';
-import { newId } from '../model/ids';
 
 export interface AppState {
   history: History<Project>;
@@ -16,9 +15,19 @@ export function initialState(project: Project): AppState {
   return { history: createHistory(project), previewBase: null, warnings: [] };
 }
 
-/** 仕様変更 → 生成済み図面を stale にする */
+/** 自動作図が有効か（既定 true）。false のときは仕様から図面を作らない */
+export const autoGenerates = (p: Project): boolean => p.meta.autoGenerate !== false;
+
+/**
+ * 仕様変更 → 生成済み図面を stale にする。
+ * 自動作図を切っているときは単線結線図を作り直さないので、機器銘板表だけに印を付ける。
+ */
 function markStale(p: Project): Project {
-  return { ...p, diagrams: p.diagrams.map((d) => (d.stale ? d : { ...d, stale: true })) };
+  const all = autoGenerates(p);
+  return {
+    ...p,
+    diagrams: p.diagrams.map((d) => (d.stale || (!all && d.kind !== 'nameplate') ? d : { ...d, stale: true })),
+  };
 }
 
 function withDiagram(p: Project, id: string, f: (d: Diagram) => Diagram): Project {
@@ -26,9 +35,9 @@ function withDiagram(p: Project, id: string, f: (d: Diagram) => Diagram): Projec
 }
 
 /** 仕様に紐づかない白紙の図面 */
-function blankDiagram(p: Project, title: string): Diagram {
+function blankDiagram(p: Project, id: string, title: string): Diagram {
   return {
-    id: newId('dg'),
+    id,
     kind: 'free',
     title,
     sheet: p.meta.sheet,
@@ -45,9 +54,13 @@ const insertAfter = (list: Diagram[], d: Diagram, afterId?: string): Diagram[] =
   return i < 0 ? [...list, d] : [...list.slice(0, i + 1), d, ...list.slice(i + 1)];
 };
 
-/** 仕様から図面を作り直す。手で足した機器・配線・文字は regenerateAll が引き継ぐ */
+/**
+ * 仕様から図面を作り直す。手で足した機器・配線・文字は regenerateAll が引き継ぐ。
+ * 自動作図を切っているときは図面に触らない（決まった形に作り直す動作をやめる）。
+ */
 function regenerateProject(p: Project): { project: Project; warnings: string[] } {
-  const r = regenerateAll(p);
+  // 自動作図を切っていても、機器銘板表は図面に置かれた機器から作り直す
+  const r = autoGenerates(p) ? regenerateAll(p) : regenerateNameplateOnly(p);
   return { project: { ...p, diagrams: r.diagrams }, warnings: r.warnings };
 }
 
@@ -98,7 +111,18 @@ export function reducer(state: AppState, action: Action): AppState {
       const r = regenerateProject(p);
       return commit(r.project, r.warnings);
     }
+    case 'RELEASE_DIAGRAM':
+      // 仕様から切り離す。絵はそのままで、以後は作り直しの対象にしない
+      return commit({
+        ...p,
+        diagrams: p.diagrams.map((d) =>
+          d.id === action.diagramId
+            ? { ...d, kind: 'free', sourceId: undefined, page: undefined, pageCount: undefined, stale: undefined }
+            : d,
+        ),
+      });
     case 'REGENERATE_ONE': {
+      if (!autoGenerates(p)) return state;
       const r = regenerateAll(p);
       const d = r.diagrams.find((x) => x.id === action.diagramId);
       if (!d) return state;
@@ -158,7 +182,7 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'DISTRIBUTE_ITEMS':
       return commit(withDiagram(p, action.diagramId, (d) => ops.distributeItems(d, new Set(action.ids), action.axis)));
     case 'ADD_DIAGRAM': {
-      const d = blankDiagram(p, action.title);
+      const d = blankDiagram(p, action.id, action.title);
       return commit({ ...p, diagrams: insertAfter(p.diagrams, d, action.afterId) });
     }
     case 'DUPLICATE_DIAGRAM': {
@@ -167,7 +191,7 @@ export function reducer(state: AppState, action: Action): AppState {
       // 写しは仕様から切り離す。以降は手で描く図面になる
       const copy: Diagram = {
         ...src,
-        id: newId('dg'),
+        id: action.newId,
         kind: 'free',
         title: `${src.title}（写し）`,
         sourceId: undefined,

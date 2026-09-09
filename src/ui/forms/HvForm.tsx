@@ -2,6 +2,7 @@ import type { CapacitorSpec, HvFeederSpec, HvSlot, HvSpec, LvPanelSpec, Nameplat
 import { HV_SLOT_LABEL } from '../../model/types';
 import { SWITCH_DEVICE_LABEL, deviceKey, hasBreakingKA, hasFuse, orderDevices } from '../../model/switchgear';
 import type { SwitchDevice } from '../../model/switchgear';
+import type { PanelMetering } from '../../model/types';
 import type { RelayKind } from '../../model/relay';
 import { TR_CONNECTIONS, TR_CONNECTION_LABEL, trConnection } from '../../model/transformer';
 import { NameplateFields, NameplateGroup, type NameplateItem } from './NameplateFields';
@@ -25,6 +26,55 @@ function OrderCell({ i, n, onMove }: { i: number; n: number; onMove: (dir: -1 | 
         →
       </button>
     </td>
+  );
+}
+
+/** 盤・変圧器二次に付ける計器（電流計・電圧計と、その切換開閉器） */
+function MeteringPicker({
+  value,
+  onChange,
+}: {
+  value: PanelMetering | undefined;
+  onChange: (m: PanelMetering) => void;
+}) {
+  const m = value ?? {};
+  return (
+    <div className="metering-picker">
+      <CheckField
+        checked={m.a === true}
+        onChange={(v) => onChange({ ...m, a: v })}
+        label="A"
+        title="電流計。CT 二次の直列（継電器の後ろ）に入ります"
+      />{' '}
+      <CheckField
+        checked={m.v === true}
+        onChange={(v) => onChange({ ...m, v })}
+        label="V"
+        title="電圧計。VT を置いてその二次につなぎます"
+      />
+      {(m.a || m.v) && (
+        <div className="switch-picker-summary">
+          {m.a && (
+            <>
+              <CheckField
+                checked={m.as === true}
+                onChange={(v) => onChange({ ...m, as: v })}
+                label="AS"
+                title="電流計切換開閉器。電流計の手前に直列に入ります"
+              />{' '}
+            </>
+          )}
+          {m.v && (
+            <CheckField
+              checked={m.vs === true}
+              onChange={(v) => onChange({ ...m, vs: v })}
+              label="VS"
+              title="電圧計切換開閉器。電圧計の手前に入ります"
+            />
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -366,17 +416,9 @@ export function HvForm({
                     <OrderCell i={i} n={hv.feeders.length} onMove={(dir) => set({ feeders: moveAt(hv.feeders, i, dir) })} />
                     <td><TextField value={f.name} onCommit={(v) => setFeeder(f.id, { name: v })} width={140} /></td>
                     <td>
-                      <CheckField
-                        checked={f.metering?.a === true}
-                        onChange={(v) => setFeeder(f.id, { metering: { ...f.metering, a: v } })}
-                        label="A"
-                        title="電流計。CT 二次の直列（継電器の後ろ）に入ります"
-                      />{' '}
-                      <CheckField
-                        checked={f.metering?.v === true}
-                        onChange={(v) => setFeeder(f.id, { metering: { ...f.metering, v } })}
-                        label="V"
-                        title="電圧計。盤に VT を置いてその二次につなぎます"
+                      <MeteringPicker
+                        value={f.metering}
+                        onChange={(m) => setFeeder(f.id, { metering: m })}
                       />
                     </td>
                     <td>
@@ -460,6 +502,7 @@ export function HvForm({
                   <th>容量 kVA</th>
                   <th>一次電圧</th>
                   <th>二次電圧</th>
+                  <th>二次計器</th>
                   <th>開閉器</th>
                   <th>PF A</th>
                   <th>電源</th>
@@ -503,6 +546,12 @@ export function HvForm({
                     </td>
                     <td>
                       <TextField value={t.secondary} width={90} list="secondary-options" onCommit={(v) => setTr(t.id, { secondary: v })} />
+                    </td>
+                    <td>
+                      <MeteringPicker
+                        value={t.secondaryMetering}
+                        onChange={(m) => setTr(t.id, { secondaryMetering: m })}
+                      />
                     </td>
                     <td><SwitchPicker value={t.devices} onChange={(v) => setTr(t.id, { devices: v })} /></td>
                     <td>

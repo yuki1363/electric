@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { nameplateRows } from '../src/model/nameplateRows';
 import { regenerateAll } from '../src/layout';
 import { sampleProject } from '../src/model/defaults';
-import type { Element, Project } from '../src/model/types';
+import type { Diagram, Element, Project } from '../src/model/types';
 
 function seeded(): Project {
   const p = sampleProject();
@@ -83,5 +83,62 @@ describe('機器銘板表', () => {
     const d = regenerateAll(p).diagrams.find((x) => x.kind === 'nameplate')!;
     expect(d.texts.some((t) => t.text === '数量')).toBe(true);
     expect(d.texts.some((t) => t.text === '3')).toBe(true);
+  });
+});
+
+describe('図面から銘板を作る（自動作図オフ）', () => {
+  /** 白紙の図面に機器を 2 台置いただけのプロジェクト */
+  function drawnOnly(): Project {
+    const p = sampleProject();
+    const d: Diagram = {
+      id: 'dg1',
+      kind: 'free',
+      title: '受電盤',
+      sheet: p.meta.sheet,
+      elements: [
+        {
+          id: 'e1',
+          kind: 'VCB',
+          x: 60,
+          y: 60,
+          rot: 0,
+          labels: ['VCB 600A'],
+          origin: 'manual',
+          nameplate: { maker: '富士電機', model: 'HA12AX' },
+        },
+        { id: 'e2', kind: 'CT', x: 60, y: 90, rot: 0, labels: ['CT 400/5'], nameplate: { maker: '松下電器', qty: 2 } },
+        { id: 'e3', kind: 'DS', x: 60, y: 30, rot: 0, labels: ['DS'] },
+      ],
+      wires: [],
+      texts: [],
+      shapes: [],
+      edited: true,
+    };
+    return { ...p, meta: { ...p.meta, autoGenerate: false }, diagrams: [d] };
+  }
+
+  it('自動作図オフなら仕様の行は出さず、図面の機器だけを出す', () => {
+    const rows = nameplateRows(drawnOnly());
+    expect(rows.map((r) => r.maker)).toEqual(['富士電機', '松下電器']);
+    // 仕様側（PAS・高圧ケーブルなど）は 1 行も出ない
+    expect(rows.some((r) => r.deviceName === 'PAS')).toBe(false);
+  });
+
+  it('銘板が空の機器は出ない', () => {
+    expect(nameplateRows(drawnOnly()).some((r) => r.deviceName.includes('断路器'))).toBe(false);
+  });
+
+  it('origin が manual でなくても、仕様に紐づかない図面なら出す', () => {
+    const rows = nameplateRows(drawnOnly());
+    const ct = rows.find((r) => r.maker === '松下電器')!;
+    expect(ct.deviceName).toBe('変流器 (CT)');
+    expect(ct.qty).toBe(2);
+  });
+
+  it('自動作図オフでも機器銘板表の図面は作り直せる', () => {
+    const p = drawnOnly();
+    const r = regenerateAll(p);
+    // 自動作図オフの経路は reducer 側。ここでは表そのものが作れることを確認する
+    expect(r.diagrams.some((d) => d.kind === 'nameplate')).toBe(true);
   });
 });

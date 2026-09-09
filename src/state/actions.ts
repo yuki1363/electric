@@ -25,10 +25,11 @@ export type Action =
   | { type: 'REGENERATE' }
   | { type: 'REGENERATE_ONE'; diagramId: string }
   // 図面そのものの操作（仕様に紐づかない図面）
-  | { type: 'ADD_DIAGRAM'; title: string; afterId?: string }
-  | { type: 'DUPLICATE_DIAGRAM'; diagramId: string }
+  | { type: 'ADD_DIAGRAM'; id: string; title: string; afterId?: string }
+  | { type: 'DUPLICATE_DIAGRAM'; diagramId: string; newId: string }
   | { type: 'RENAME_DIAGRAM'; diagramId: string; title: string }
   | { type: 'REMOVE_DIAGRAM'; diagramId: string }
+  | { type: 'RELEASE_DIAGRAM'; diagramId: string }
   // 図面編集
   | { type: 'MOVE_PREVIEW'; diagramId: string; ids: string[]; dx: number; dy: number }
   | { type: 'MOVE_LABEL_PREVIEW'; diagramId: string; id: string; offset: Point }

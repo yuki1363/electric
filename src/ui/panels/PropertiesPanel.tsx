@@ -11,10 +11,13 @@ export function PropertiesPanel({
   diagram,
   selection,
   onSelectionChange,
+  autoGenerate = true,
 }: {
   diagram: Diagram;
   selection: string[];
   onSelectionChange: (ids: string[]) => void;
+  /** false のときは図面が正なので、どの機器にも銘板を入力できる */
+  autoGenerate?: boolean;
 }) {
   const dispatch = useDispatch();
   const del = () => {
@@ -89,7 +92,7 @@ export function PropertiesPanel({
 
   const id = selection[0]!;
   const el = diagram.elements.find((e) => e.id === id);
-  if (el) return <ElementProps diagram={diagram} el={el} onDelete={del} />;
+  if (el) return <ElementProps diagram={diagram} el={el} onDelete={del} canEditNameplate={canEditNameplate(diagram, el, autoGenerate)} />;
   const w = diagram.wires.find((x) => x.id === id);
   if (w) return <WireProps diagram={diagram} wire={w} onDelete={del} />;
   const t = diagram.texts.find((x) => x.id === id);
@@ -119,7 +122,26 @@ function cleanNameplate(np: Nameplate): Nameplate | undefined {
   return Object.keys(out).length > 0 ? (out as Nameplate) : undefined;
 }
 
-function ElementProps({ diagram, el, onDelete }: { diagram: Diagram; el: Element; onDelete: () => void }) {
+/**
+ * 銘板を図面側で入力してよい機器か。
+ * 自動作図の機器は仕様側に銘板があるので二重にしない。ただし自動作図を切っているときと
+ * 仕様に紐づかない図面（白紙・写し）では、図面が正なのでどれでも入力できる。
+ */
+function canEditNameplate(d: Diagram, el: Element, autoGenerate: boolean): boolean {
+  return !autoGenerate || d.kind === 'free' || el.origin === 'manual';
+}
+
+function ElementProps({
+  diagram,
+  el,
+  onDelete,
+  canEditNameplate: canEdit,
+}: {
+  diagram: Diagram;
+  el: Element;
+  onDelete: () => void;
+  canEditNameplate: boolean;
+}) {
   const dispatch = useDispatch();
   const def = getSymbol(el.kind);
   const patch = (p: Partial<Element>) => dispatch({ type: 'UPDATE_ELEMENT', diagramId: diagram.id, id: el.id, patch: p });
@@ -145,7 +167,7 @@ function ElementProps({ diagram, el, onDelete }: { diagram: Diagram; el: Element
           <button onClick={() => patch({ labelOffset: undefined })}>既定位置に戻す</button>
         </Row>
       )}
-      {el.origin === 'manual' ? (
+      {canEdit ? (
         <>
           <Row label="銘板の機器名称">
             <TextField
