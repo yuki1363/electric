@@ -150,7 +150,19 @@ function neededPitch(hv: HvSpec): number {
   // 隣の列は自分の中心から bbox.w/2 だけ左に張り出すので、その手前で終わる幅が要る
   const half = getSymbol('TR_3PH').bbox.w / 2;
   const need = half + 3 + widest + 3 + half;
-  return Math.max(BP_MIN, Math.ceil(need / GRID) * GRID);
+  // 分岐盤の見出しは CT の右へ継電器・計器・VT を横一列に出す。
+  // 配下が 2 台以上ある盤は区画自体が広いので余裕があり、1 列しか使わない盤だけ気にすればよい
+  const leavesOf = (id: string) =>
+    hv.transformers.filter((t) => t.feederId === id).length + hv.capacitors.filter((c) => c.feederId === id).length;
+  const headNeed = Math.max(
+    0,
+    ...hv.feeders.map((f) => {
+      if (!f.ct || leavesOf(f.id) > 1) return 0;
+      const n = orderRelays(f.relays ?? (f.ocr ? ['OCR'] : [])).length + (f.metering?.a ? 1 : 0);
+      return 30 + n * 30 + (f.metering?.v ? 40 : 0) + 10;
+    }),
+  );
+  return Math.max(BP_MIN, Math.ceil(Math.max(need, headNeed) / GRID) * GRID);
 }
 
 /** 副変電所として描くときの見出し。省略すると受電設備（引込あり）として描く */
@@ -546,6 +558,15 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       yy += 20;
     }
 
+    // 電圧計は盤に置いた VT から取るので、CT の 1 段上に分岐点を作る
+    const wantV = f.metering?.v === true;
+    let vTap: Element | null = null;
+    if (wantV && f.ct) {
+      vTap = b.el('JUNCTION', cx, yy + 10);
+      b.wire(last, 'S', vTap, 'N');
+      last = vTap;
+    }
+
     if (f.ct) {
       // CT のラベルは既定では左側に出るが、隣の分岐盤の VCB ラベルとぶつかるため
       // 引き出した OCR（無ければ CT の右下）にまとめて書く
@@ -555,21 +576,38 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       yy += 20;
       const ctLines = withModel([`CT ${f.ctRatio ?? ''}`.trim()], fnp('ct'));
       const fRelays = orderRelays(f.relays ?? (f.ocr ? ['OCR'] : []));
-      if (fRelays.length > 0) {
-        let rx = cx + 30;
-        let prev: Element = ct;
-        let prevPort = 'E';
-        for (const r of fRelays) {
-          const el = b.el(relaySymbolKind(r), rx, ct.y, { labels: [] });
-          b.wire(prev, prevPort, el, 'W', 'control');
-          prev = el;
-          prevPort = 'E';
-          rx += 30;
-        }
+      let rx = cx + 30;
+      let prev: Element = ct;
+      let prevPort = 'E';
+      /** CT 二次の直列に 1 台足す */
+      const chain = (kind: SK, labels: string[] = []) => {
+        const el = b.el(kind, rx, ct.y, { labels });
+        b.wire(prev, prevPort, el, 'W', 'control');
+        prev = el;
+        prevPort = 'E';
+        rx += 30;
+        return el;
+      };
+      for (const r of fRelays) chain(relaySymbolKind(r));
+      // 電流計は CT 二次の直列の末尾に入れる
+      if (f.metering?.a) chain('METER_A', withModel([], fnp('meterA')));
+      if (fRelays.length > 0 || f.metering?.a) {
         b.textLines(cx + 30, ct.y + 9, ctLines, TEXT.rating, 'middle');
       } else {
         b.textLines(cx + 3, ct.y + 9, ctLines, TEXT.rating, 'start');
       }
+
+      // 電圧計。主回路から VT を取り、その二次に V をつなぐ
+      if (vTap) {
+        const vt = b.el('VT', rx + 5, ct.y, { labels: withModel(['VT'], fnp('vt')) });
+        b.wire(vTap, 'E', vt, 'N');
+        const v = b.el('METER_V', rx + 35, ct.y, { labels: withModel([], fnp('meterV')) });
+        b.wireToPoint(vt, 'S', { x: vt.x, y: ct.y + 15 }, 'control');
+        b.wirePoints({ x: vt.x, y: ct.y + 15 }, { x: v.x, y: ct.y + 15 }, 'control');
+        b.wireToPoint(v, 'S', { x: v.x, y: ct.y + 15 }, 'control');
+      }
+    } else if (f.metering?.a || wantV) {
+      b.warn(`${f.name}: 計器は CT の二次から取るため、CT を有効にしてください`);
     }
 
     if (f.cable) {

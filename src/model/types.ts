@@ -217,6 +217,8 @@ export interface HvFeederSpec {
   ocr: boolean;
   /** 保護継電器。未設定なら ocr から移行する */
   relays?: RelayKind[];
+  /** 盤に付ける計器。電流計は CT 二次、電圧計は盤に置いた VT から取る */
+  metering?: { a?: boolean; v?: boolean };
   cable?: { type: string; sq: number; lengthM?: number };
   /** 負荷名（配下に機器を置かない場合の行き先表示） */
   loadName?: string;

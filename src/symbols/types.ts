@@ -56,6 +56,7 @@ export type SymbolKind =
   | 'PAS'
   | 'UGS'
   | 'CABLE_HEAD'
+  | 'HV_CABLE'
   | 'VCT'
   | 'DS'
   | 'VCB'

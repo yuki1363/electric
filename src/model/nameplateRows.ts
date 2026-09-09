@@ -114,6 +114,11 @@ function hvRows(hv: Project['hv'], prefix: string): NameplateRow[] {
       for (const r of orderRelays(f.relays ?? (f.ocr ? ['OCR'] : []))) {
         out.push(row(RELAY_SHORT[r], fnp(relayKey(r)), '', g(f.name)));
       }
+      if (f.metering?.a) out.push(row('A', fnp('meterA'), '', g(f.name)));
+      if (f.metering?.v) {
+        out.push(row('VT', fnp('vt'), '6600/110V', g(f.name)));
+        out.push(row('V', fnp('meterV'), '', g(f.name)));
+      }
       if (f.cable) {
         out.push(
           row(

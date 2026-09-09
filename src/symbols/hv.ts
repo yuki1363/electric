@@ -86,6 +86,38 @@ export const CABLE_HEAD: SymbolDef = {
   defaultLabels: ['CH'],
 };
 
+/** 高圧ケーブル: 両端にケーブルヘッドを付けたケーブル区間（盤間の高圧ケーブルを 1 台として描く） */
+export const HV_CABLE: SymbolDef = {
+  kind: 'HV_CABLE',
+  nameJa: '高圧ケーブル',
+  category: 'hv',
+  bbox: { w: 8, h: 30 },
+  prims: [
+    L(0, -15, 0, -12),
+    PL(
+      [
+        [-3.5, -4],
+        [3.5, -4],
+        [0, -12],
+      ],
+      true,
+    ),
+    L(0, -4, 0, 4),
+    PL(
+      [
+        [-3.5, 4],
+        [3.5, 4],
+        [0, 12],
+      ],
+      true,
+    ),
+    L(0, 12, 0, 15),
+  ],
+  ports: portsNS(15),
+  labelAnchor: rightLabel(8),
+  defaultLabels: ['CVT'],
+};
+
 /** 計器用変成器 VCT: 箱 + 文字。E ポートから電力量計へ */
 export const VCT: SymbolDef = {
   kind: 'VCT',
@@ -371,6 +403,7 @@ export const HV_SYMBOLS: SymbolDef[] = [
   PAS,
   UGS,
   CABLE_HEAD,
+  HV_CABLE,
   VCT,
   DS,
   VCB,

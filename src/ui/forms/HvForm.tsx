@@ -345,6 +345,7 @@ export function HvForm({
                 <tr>
                   <th>並び</th>
                   <th>盤名</th>
+                  <th>計器</th>
                   <th>遮断/開閉</th>
                   <th>定格 A</th>
                   <th>遮断 kA / PF A</th>
@@ -364,6 +365,20 @@ export function HvForm({
                   <tr key={f.id}>
                     <OrderCell i={i} n={hv.feeders.length} onMove={(dir) => set({ feeders: moveAt(hv.feeders, i, dir) })} />
                     <td><TextField value={f.name} onCommit={(v) => setFeeder(f.id, { name: v })} width={140} /></td>
+                    <td>
+                      <CheckField
+                        checked={f.metering?.a === true}
+                        onChange={(v) => setFeeder(f.id, { metering: { ...f.metering, a: v } })}
+                        label="A"
+                        title="電流計。CT 二次の直列（継電器の後ろ）に入ります"
+                      />{' '}
+                      <CheckField
+                        checked={f.metering?.v === true}
+                        onChange={(v) => setFeeder(f.id, { metering: { ...f.metering, v } })}
+                        label="V"
+                        title="電圧計。盤に VT を置いてその二次につなぎます"
+                      />
+                    </td>
                     <td>
                       <SwitchPicker value={f.devices} onChange={(v) => setFeeder(f.id, { devices: v })} />
                     </td>
