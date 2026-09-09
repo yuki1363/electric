@@ -21,7 +21,6 @@ export function defaultHv(): HvSpec {
     feeders: [],
     transformers: [],
     capacitors: [],
-    grounding: { aType: true, bType: true },
   };
 }
 

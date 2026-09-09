@@ -10,7 +10,7 @@ export type Action =
   | { type: 'UPDATE_PANEL'; panel: LvPanelSpec }
   | { type: 'ADD_PANEL'; panel: LvPanelSpec }
   | { type: 'REMOVE_PANEL'; id: string }
-  | { type: 'REGENERATE'; keepEdited: boolean }
+  | { type: 'REGENERATE' }
   | { type: 'REGENERATE_ONE'; diagramId: string }
   // 図面編集
   | { type: 'MOVE_PREVIEW'; diagramId: string; ids: string[]; dx: number; dy: number }

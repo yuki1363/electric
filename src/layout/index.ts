@@ -4,6 +4,7 @@ import { generateLvSld } from './lvSld';
 import { generateLvFace } from './lvFace';
 import { generateLvSchedule } from './lvSchedule';
 import { generateNameplate } from './nameplate';
+import { carryOverEdits } from './carryOver';
 import { fitDiagram, isTight, scaleLabel } from './fit';
 import type { GenResult } from './types';
 
@@ -23,13 +24,8 @@ function fitResult(r: GenResult): GenResult {
   return { diagram, warnings };
 }
 
-export interface RegenerateResult {
-  diagrams: Diagram[];
-  warnings: string[];
-}
-
-/** 仕様から全図面を生成する */
-export function regenerateAll(project: Project): RegenerateResult {
+/** 仕様から全図面を生成する（用紙に収める前・等倍） */
+function buildAll(project: Project): GenResult[] {
   const raw: GenResult[] = [];
   if (project.hv.enabled) {
     raw.push(...generateHvSld(project.hv, project.meta, project.panels));
@@ -42,22 +38,35 @@ export function regenerateAll(project: Project): RegenerateResult {
     raw.push(...generateLvSchedule(panel, project.meta, project.hv.transformers));
   }
   raw.push(...generateNameplate(project));
-  const results = raw.map(fitResult);
+  return raw;
+}
+
+export interface RegenerateResult {
+  diagrams: Diagram[];
+  warnings: string[];
+}
+
+/**
+ * 仕様から全図面を生成し、既存図面の手作業を引き継いでから用紙に収める。
+ * 手で足した機器・配線・文字は作り直しても消えない（carryOverEdits）。
+ * 仕様から消えた図面は結果に含まれない＝削除される。
+ */
+export function regenerateAll(project: Project, existing: Diagram[] = project.diagrams): RegenerateResult {
+  const results = mergeDiagrams(existing, buildAll(project)).map(fitResult);
   return {
     diagrams: results.map((r) => r.diagram),
     warnings: results.flatMap((r) => r.warnings.map((w) => `[${r.diagram.title}] ${w}`)),
   };
 }
 
-/** 既存の図面リストへ再生成結果をマージする。
- *  - 同 id の図面は置換（keepEdited のとき手動編集済みは残す）
- *  - 仕様から消えた図面は削除
- */
-export function mergeDiagrams(existing: Diagram[], generated: Diagram[], keepEdited: boolean): Diagram[] {
-  return generated.map((d) => {
-    const old = existing.find((e) => e.id === d.id);
-    if (old && keepEdited && old.edited) return { ...old, stale: true };
-    return d;
+/** 生成し直した図面（等倍）へ、同 id の既存図面の手作業を載せ替える */
+export function mergeDiagrams(existing: Diagram[], generated: GenResult[]): GenResult[] {
+  return generated.map((r) => {
+    const c = carryOverEdits(
+      existing.find((e) => e.id === r.diagram.id),
+      r.diagram,
+    );
+    return { diagram: c.diagram, warnings: [...r.warnings, ...c.warnings] };
   });
 }
 

@@ -1,4 +1,4 @@
-import type { Prim } from '../symbols/types';
+import type { Point, Prim } from '../symbols/types';
 import type { Diagram } from '../model/types';
 import { bboxOfPrims, isEmptyBBox, union, type BBox } from '../geom/bbox';
 import { elementLabelPrims, elementPrims } from '../render/flatten';
@@ -7,6 +7,15 @@ import { sheetGeom } from './constants';
 
 /** これ以上小さくすると読めないので下限を設ける */
 export const MIN_SCALE = 0.35;
+
+/** 何も動かさなかったときの変換 */
+const IDENTITY = { k: 1, ox: 0, oy: 0 };
+
+/** 用紙に収めたときの変換を打ち消して、生成直後（等倍）の座標に戻す */
+export function unfitPoint(p: Point, fit: Diagram['fit']): Point {
+  if (!fit || fit.k === 0) return p;
+  return { x: (p.x - fit.ox) / fit.k, y: (p.y - fit.oy) / fit.k };
+}
 
 /** 丸め誤差で枠を割らないための余裕 mm */
 const PAD = 1;
@@ -70,7 +79,7 @@ export interface FitResult {
 export function fitDiagram(d: Diagram): FitResult {
   const g = sheetGeom(d.sheet);
   const b = contentBBox(d);
-  if (isEmptyBBox(b)) return { diagram: d, scale: 1, overflow: false };
+  if (isEmptyBBox(b)) return { diagram: { ...d, scale: 1, fit: d.fit ?? IDENTITY }, scale: 1, overflow: false };
 
   const availW = g.drawable.x2 - g.drawable.x1;
   const availH = g.drawable.y2 - g.drawable.y1;
@@ -86,7 +95,9 @@ export function fitDiagram(d: Diagram): FitResult {
     // 大きさは足りている。枠から出ている分だけ最小限ずらす
     const dx = Math.max(0, g.drawable.x1 - b.minX) - Math.max(0, b.maxX - g.drawable.x2);
     const dy = Math.max(0, g.drawable.y1 - b.minY) - Math.max(0, b.maxY - g.drawable.y2);
-    if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return { diagram: d, scale: 1, overflow: false };
+    if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) {
+      return { diagram: { ...d, scale: 1, fit: d.fit ?? IDENTITY }, scale: 1, overflow: false };
+    }
     ox = dx;
     oy = dy;
   } else {
@@ -98,12 +109,19 @@ export function fitDiagram(d: Diagram): FitResult {
     ox = g.drawable.x1 - b.minX * scale;
     oy = g.drawable.y1 - b.minY * scale;
   }
+  const prev = d.fit ?? IDENTITY;
   const X = (x: number) => round(ox + x * scale, 3);
   const Y = (y: number) => round(oy + y * scale, 3);
 
   const diagram: Diagram = {
     ...d,
     scale,
+    // 既に収めた図面をさらに収めた場合に備えて変換を合成する
+    fit: {
+      k: round(scale * prev.k, 6),
+      ox: round(ox + scale * prev.ox, 4),
+      oy: round(oy + scale * prev.oy, 4),
+    },
     elements: d.elements.map((el) => ({
       ...el,
       x: X(el.x),

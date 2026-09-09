@@ -261,10 +261,6 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                 onChange={(v) => set({ metering: { ...hv.metering, vtfLayout: v } })}
               />
             </Row>
-            <Row label="接地">
-              <CheckField checked={hv.grounding.aType} onChange={(v) => set({ grounding: { ...hv.grounding, aType: v } })} label="A種（筐体・LA）" />{' '}
-              <CheckField checked={hv.grounding.bType} onChange={(v) => set({ grounding: { ...hv.grounding, bType: v } })} label="B種（変圧器二次）" />
-            </Row>
           </Section>
 
           <Section title="高圧分岐盤" actions={<button onClick={addFeeder}>+ 追加</button>}>

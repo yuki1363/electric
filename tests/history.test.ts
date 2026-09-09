@@ -77,14 +77,14 @@ describe('reducer', () => {
     expect(d.wires.length).toBe(before - 2);
   });
 
-  it('仕様変更で図面が stale になり、再生成で解消。編集済みは keepEdited で保持', () => {
+  it('仕様変更で図面が stale になり、再生成で解消。自動作図した機器は仕様どおりに戻る', () => {
     let s = reducer(s0, { type: 'UPDATE_ELEMENT', diagramId: hv.id, id: el.id, patch: { x: el.x + 5 } });
     s = reducer(s, { type: 'SET_META', meta: { author: 'テスト' } });
     expect(s.history.present.diagrams.every((d) => d.stale)).toBe(true);
-    const kept = reducer(s, { type: 'REGENERATE', keepEdited: true });
-    expect(kept.history.present.diagrams[0]!.edited).toBe(true);
-    const fresh = reducer(s, { type: 'REGENERATE', keepEdited: false });
-    expect(fresh.history.present.diagrams[0]!.edited).toBe(false);
-    expect(fresh.history.present.diagrams[0]!.stale).toBeUndefined();
+    const fresh = reducer(s, { type: 'REGENERATE' });
+    const d = fresh.history.present.diagrams[0]!;
+    expect(d.stale).toBeUndefined();
+    expect(d.edited).toBe(false);
+    expect(d.elements.find((e) => e.id === el.id)!.x).toBe(el.x);
   });
 });

@@ -35,7 +35,9 @@ describe('高圧受電設備 単線結線図 生成', () => {
     expect(count('SR')).toBe(1);
     expect(count('METER_WH')).toBe(1); // 取引用のみ
     expect(count('METER_V') + count('METER_A') + count('METER_W')).toBe(3);
-    expect(count('GROUND_B')).toBe(2);
+    // 接地は避雷器の A種だけ。変圧器の B種・筐体の A種は描かない
+    expect(count('GROUND_B')).toBe(0);
+    expect(count('GROUND_A')).toBe(1);
   });
 
   it('幹線機器は上から順に並ぶ', () => {

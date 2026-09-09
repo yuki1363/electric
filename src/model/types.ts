@@ -237,7 +237,6 @@ export interface HvSpec {
   capacitors: CapacitorSpec[];
   /** 受電盤内の機器銘板 */
   nameplates?: Partial<Record<HvSlot, Nameplate>>;
-  grounding: { aType: boolean; bType: boolean };
 }
 
 // ---------------------------------------------------------------- 低圧分電盤
@@ -290,6 +289,12 @@ export interface Element {
   labelOffset?: Point;
   /** 仕様のエコー（プロパティパネル表示用） */
   props?: Record<string, string | number | boolean>;
+  /** 手で足したものは 'manual'。図面を作り直しても引き継ぐ目印（自動生成では付けない） */
+  origin?: 'manual';
+  /** 機器銘板。図面で足した機器はここに入力する（仕様から生成した機器は仕様側に持つ） */
+  nameplate?: Nameplate;
+  /** 銘板表に出す機器名称。未入力なら図記号の名前を使う */
+  nameplateName?: string;
 }
 
 export type WireEnd = { elementId: Id; portId: string } | { x: number; y: number };
@@ -304,6 +309,8 @@ export interface Wire {
   manual: boolean;
   /** normal: 主回路 / bus: 母線 / control: 計器・制御回路（細線） */
   style: 'normal' | 'bus' | 'control';
+  /** 手で引いたものは 'manual'。図面を作り直しても引き継ぐ */
+  origin?: 'manual';
 }
 
 export interface TextItem {
@@ -314,6 +321,8 @@ export interface TextItem {
   h: number;
   anchor: TextAnchor;
   rot?: number;
+  /** 手で足したものは 'manual'。図面を作り直しても引き継ぐ */
+  origin?: 'manual';
 }
 
 export interface Diagram {
@@ -328,6 +337,11 @@ export interface Diagram {
   pageCount?: number;
   /** 用紙に収めるために適用された縮尺（1 = 等倍） */
   scale?: number;
+  /**
+   * 用紙に収めるときに適用した変換 (x' = ox + x * k)。
+   * 図面を作り直すとき、手で足したものをこの逆変換で等倍に戻してから引き継ぐ。
+   */
+  fit?: { k: number; ox: number; oy: number };
   elements: Element[];
   wires: Wire[];
   texts: TextItem[];

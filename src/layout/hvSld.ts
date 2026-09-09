@@ -547,27 +547,14 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     const feedLabel = panel ? `${panel.name} へ` : '低圧負荷へ';
 
     if (node.children.length === 0) {
-      if (hv.grounding.bType) {
-        const j2 = b.el('JUNCTION', cx, yTap);
-        b.wire(tr, 'S', j2, 'N');
-        const gb = b.el('GROUND_B', cx + 15, yTap + 10, { labels: ['B種'] });
-        b.wire(j2, 'E', gb, 'N');
-        const arrow = b.el('LOAD_ARROW', cx, yTap + 10, { labels: [feedLabel] });
-        b.wire(j2, 'S', arrow, 'N');
-      } else {
-        const arrow = b.el('LOAD_ARROW', cx, yTap + 5, { labels: [feedLabel] });
-        b.wire(tr, 'S', arrow, 'N');
-      }
+      const arrow = b.el('LOAD_ARROW', cx, yTap + 5, { labels: [feedLabel] });
+      b.wire(tr, 'S', arrow, 'N');
       return;
     }
 
     // 二次側に変圧器がぶら下がる（低圧 → 低圧）
     const j2 = b.el('JUNCTION', cx, yTap);
     b.wire(tr, 'S', j2, 'N');
-    if (hv.grounding.bType) {
-      const gb = b.el('GROUND_B', cx + 15, yTap + 10, { labels: ['B種'] });
-      b.wire(j2, 'E', gb, 'N');
-    }
     const widths = node.children.map((c) => leafColumns({ kind: 'tr', node: c }));
     const centers: number[] = [];
     let cxi = x;
@@ -656,14 +643,6 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
 
   b.wirePoints({ x: busStartX, y: busY }, { x: busEndX, y: busY }, 'bus');
   if (first) b.text(TX - 3, busY - 3, '高圧母線 6.6kV', TEXT.rating, 'end');
-
-  // 筐体接地（作図内容の下端に合わせて置く。1 枚目だけ）
-  if (hv.grounding.aType && first) {
-    const bottom = Math.max(...b.elements.map((e) => e.y), busY);
-    const gx = snapValue(g.drawable.x1 + 10, GRID);
-    const gy = snapValue(bottom, GRID);
-    b.el('GROUND_A', gx, gy, { labels: ['A種接地（筐体）'] });
-  }
 
   return {
     diagram: b.build(o.pageCount > 1 ? { page: o.page, pageCount: o.pageCount } : {}),

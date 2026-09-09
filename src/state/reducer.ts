@@ -1,5 +1,5 @@
 import type { Diagram, Project } from '../model/types';
-import { mergeDiagrams, regenerateAll } from '../layout';
+import { regenerateAll } from '../layout';
 import type { Action } from './actions';
 import * as ops from './diagramOps';
 import { createHistory, push, redo, replace, undo, type History } from './history';
@@ -24,9 +24,10 @@ function withDiagram(p: Project, id: string, f: (d: Diagram) => Diagram): Projec
   return { ...p, diagrams: p.diagrams.map((d) => (d.id === id ? f(d) : d)) };
 }
 
-function regenerateProject(p: Project, keepEdited: boolean): { project: Project; warnings: string[] } {
+/** 仕様から図面を作り直す。手で足した機器・配線・文字は regenerateAll が引き継ぐ */
+function regenerateProject(p: Project): { project: Project; warnings: string[] } {
   const r = regenerateAll(p);
-  return { project: { ...p, diagrams: mergeDiagrams(p.diagrams, r.diagrams, keepEdited) }, warnings: r.warnings };
+  return { project: { ...p, diagrams: r.diagrams }, warnings: r.warnings };
 }
 
 export function reducer(state: AppState, action: Action): AppState {
@@ -40,12 +41,12 @@ export function reducer(state: AppState, action: Action): AppState {
 
   switch (action.type) {
     case 'LOAD_PROJECT': {
-      const r = regenerateProject(action.project, true);
+      const r = regenerateProject(action.project);
       return { history: createHistory(r.project), previewBase: null, warnings: r.warnings };
     }
     case 'IMPORT_NAMEPLATES': {
       // 取り込みは 1 手として履歴に積む（Undo 1 回で元に戻せる）
-      const r = regenerateProject(markStale(action.project), false);
+      const r = regenerateProject(markStale(action.project));
       return commit(r.project, r.warnings);
     }
     case 'SET_META':
@@ -59,7 +60,7 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'REMOVE_PANEL':
       return commit(markStale({ ...p, panels: p.panels.filter((x) => x.id !== action.id) }));
     case 'REGENERATE': {
-      const r = regenerateProject(p, action.keepEdited);
+      const r = regenerateProject(p);
       return commit(r.project, r.warnings);
     }
     case 'REGENERATE_ONE': {

@@ -13,6 +13,20 @@ function touched(d: Diagram): Diagram {
   return { ...d, edited: true };
 }
 
+/**
+ * 手で足したものに印を付ける。
+ * 自動生成（DiagramBuilder）は付けないので、図面を作り直すときに
+ * 「引き継ぐもの」と「引き直すもの」がこれだけで確実に分かれる。
+ */
+const manual = <T extends { origin?: 'manual' }>(x: T): T => ({ ...x, origin: 'manual' });
+
+/**
+ * 縮小のかかった図面に足すものは、まわりの機器と同じ大きさにそろえる。
+ * これをしないと 1:1.15 の図面に等倍の図記号が乗って 1 台だけ大きくなる。
+ */
+const sized = (d: Diagram, el: Element): Element =>
+  el.scale === undefined && d.scale && d.scale !== 1 ? { ...el, scale: d.scale } : el;
+
 /** 選択項目（要素・テキスト・配線）を移動する。接続配線は再ルーティング */
 export function moveItems(d: Diagram, ids: ReadonlySet<string>, dx: number, dy: number): Diagram {
   if (dx === 0 && dy === 0) return d;
@@ -80,7 +94,7 @@ export function insertIntoWire(d: Diagram, wireId: string, el: Element): Diagram
   if (!ports.some((p) => p.id === inPort) || !ports.some((p) => p.id === outPort)) return d;
 
   // 線の上にぴったり載せる。格子に丸めると自動縮尺のかかった図面で線がずれる
-  const placed: Element = dir === 'v' ? { ...el, x: at.x } : { ...el, y: at.y };
+  const placed: Element = manual(sized(d, dir === 'v' ? { ...el, x: at.x } : { ...el, y: at.y }));
 
   // 入る隙間が足りなければ、同じ列（行）の下流側をずらして場所を空ける
   const bbox = getSymbol(placed.kind).bbox;
@@ -106,9 +120,11 @@ export function insertIntoWire(d: Diagram, wireId: string, el: Element): Diagram
   const elements = [...moved, placed];
   const base = d.wires.filter((x) => x.id !== wireId).map((x) => rerouteWire(x, elements));
   const mk = (n: number, from: Wire['from'], to: Wire['to']): Wire =>
-    rerouteWire(
-      { id: seqId(d.id, d.wires.length + n, 'w'), from, to, points: [], manual: false, style: w.style },
-      elements,
+    manual(
+      rerouteWire(
+        { id: seqId(d.id, d.wires.length + n, 'w'), from, to, points: [], manual: false, style: w.style },
+        elements,
+      ),
     );
   return touched({
     ...d,
@@ -122,11 +138,11 @@ export function insertIntoWire(d: Diagram, wireId: string, el: Element): Diagram
 }
 
 export function addElement(d: Diagram, el: Element): Diagram {
-  return touched({ ...d, elements: [...d.elements, el] });
+  return touched({ ...d, elements: [...d.elements, manual(sized(d, el))] });
 }
 
 export function addWire(d: Diagram, w: Wire): Diagram {
-  return touched({ ...d, wires: [...d.wires, rerouteWire(w, d.elements)] });
+  return touched({ ...d, wires: [...d.wires, manual(rerouteWire(w, d.elements))] });
 }
 
 export function updateWire(d: Diagram, id: string, patch: Partial<Wire>): Diagram {
@@ -139,7 +155,8 @@ export function updateWire(d: Diagram, id: string, patch: Partial<Wire>): Diagra
 }
 
 export function addText(d: Diagram, t: TextItem): Diagram {
-  return touched({ ...d, texts: [...d.texts, t] });
+  const h = d.scale && d.scale !== 1 ? t.h * d.scale : t.h;
+  return touched({ ...d, texts: [...d.texts, manual({ ...t, h })] });
 }
 
 export function updateText(d: Diagram, id: string, patch: Partial<TextItem>): Diagram {

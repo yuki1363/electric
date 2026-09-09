@@ -19,6 +19,7 @@ import { HvForm } from './forms/HvForm';
 import { LvPanelForm } from './forms/LvPanelForm';
 import { DiagramList } from './panels/DiagramList';
 import { Canvas } from './canvas/Canvas';
+import { REGEN_CONFIRM, REGEN_TITLE } from './panels/DiagramList';
 
 type Tab = 'spec' | 'draw' | 'export';
 
@@ -56,6 +57,7 @@ export function Shell({ state }: { state: AppState }) {
   }, [activeForSel, selection]);
 
   const anyStale = project.diagrams.some((d) => d.stale);
+  const anyEdited = project.diagrams.some((d) => d.edited);
 
   const loadProject = (p: Project) => dispatch({ type: 'LOAD_PROJECT', project: p });
 
@@ -121,8 +123,11 @@ export function Shell({ state }: { state: AppState }) {
           <span className="sep" />
           <button
             className={anyStale ? 'primary' : ''}
-            onClick={() => dispatch({ type: 'REGENERATE', keepEdited: true })}
-            title="仕様から図面を再生成（手動編集済みの図面は保持）"
+            onClick={() => {
+              if (anyEdited && !confirm(REGEN_CONFIRM)) return;
+              dispatch({ type: 'REGENERATE' });
+            }}
+            title={REGEN_TITLE}
           >
             図面を再生成{anyStale ? ' *' : ''}
           </button>
