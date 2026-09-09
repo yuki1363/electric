@@ -266,7 +266,7 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
      * 電流計・電力計・力率計・電力量計の電流コイルは CT 二次（5A 回路）に直列に入るので、
      * CT → OCR → 各計器 と横一列につなぐ。電圧コイルは VT 二次から下の電圧回路で取る。
      */
-    const drawMetering = (ct: Element | null, ocr: boolean): void => {
+    const drawMetering = (ct: Element | null, ocr: boolean): number => {
       const mY = ct ? ct.y : tapY + 15;
       /** 横一列に並べるときの隣どうしの隙間 */
       const GAP = 10;
@@ -287,7 +287,7 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
         b.wire(ct, 'E', o, 'W', 'control');
         last = { el: o, port: 'E' };
       }
-      if (!tap || !hasMetering) return;
+      if (!tap || !hasMetering) return mY;
 
       /** 電圧回路につなぐ計器を左から順に */
       const voltEls: Element[] = [];
@@ -349,27 +349,33 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
           if (m.x !== left) b.el('JUNCTION', m.x, vbusY);
         });
         b.text(vx + 10, vbusY + 1, 'VT二次', TEXT.rating, 'start');
+        return vbusY;
       }
+      return mY;
     };
 
-    // 変流器と主遮断装置
+    // 主遮断装置 → 変流器 → 母線 の順に置く。
+    // CT を主遮断装置の負荷側に置くと、遮断器を開けば CT 以降が無充電になる（分岐盤の見出しと同じ並び）
     const mb = hv.mainBreaker;
-    if (mb.ct) {
-      const ct = place('CT', withModel([`CT ${mb.ctRatio ?? ''}`.trim()], hv.nameplates?.ct));
-      drawMetering(ct, mb.ocr);
-    } else if (currKinds.length > 0) {
-      // 電流計・電力計は CT 二次から取るので、保護用 CT が無ければ計器用を足す
-      drawMetering(place('CT', withModel(['CT'], hv.nameplates?.ct)), false);
-      b.warn('電流計・電力計は CT 二次から取るため、計器用 CT を追加しました（主遮断装置に CT が無いため）');
-    } else {
-      drawMetering(null, false);
-    }
     for (const dev of orderDevices(mb.devices)) {
       place(dev, withModel(deviceLabel(dev, mb), hv.nameplates?.[deviceKey(dev) as HvSlot]), {
         ratedA: mb.ratedA,
         ...(mb.breakingKA ? { breakingKA: mb.breakingKA } : {}),
       });
     }
+    let lowest = 0;
+    if (mb.ct) {
+      const ct = place('CT', withModel([`CT ${mb.ctRatio ?? ''}`.trim()], hv.nameplates?.ct));
+      lowest = drawMetering(ct, mb.ocr);
+    } else if (currKinds.length > 0) {
+      // 電流計・電力計は CT 二次から取るので、保護用 CT が無ければ計器用を足す
+      lowest = drawMetering(place('CT', withModel(['CT'], hv.nameplates?.ct)), false);
+      b.warn('電流計・電力計は CT 二次から取るため、計器用 CT を追加しました（主遮断装置に CT が無いため）');
+    } else {
+      lowest = drawMetering(null, false);
+    }
+    // 計器・VT 二次の横母線が高圧母線とぶつからないよう、下端より下に母線を張る
+    y = Math.max(y, lowest + 15);
   }
 
   // ---------------------------------------------------------------- 高圧母線と分岐

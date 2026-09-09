@@ -40,8 +40,20 @@ describe('高圧受電設備 単線結線図 生成', () => {
     expect(count('GROUND_A')).toBe(1);
   });
 
+  it('CT は主遮断装置と高圧母線の間に入り、VT 二次の横母線が母線と重ならない', () => {
+    const vcb = d.elements.find((e) => e.kind === 'VCB')!;
+    const ct = d.elements.find((e) => e.kind === 'CT')!;
+    const busY = Math.max(...d.wires.filter((w) => w.style === 'bus').flatMap((w) => w.points.map((p) => p.y)));
+    expect(vcb.y).toBeLessThan(ct.y);
+    expect(ct.y).toBeLessThan(busY);
+    // 計器の配線（control）は母線より上に収まる
+    const control = d.wires.filter((w) => w.style === 'control').flatMap((w) => w.points.map((p) => p.y));
+    expect(Math.max(...control)).toBeLessThan(busY);
+  });
+
   it('幹線機器は上から順に並ぶ', () => {
-    const order = ['PAS', 'CABLE_HEAD', 'VCT', 'DS', 'CT', 'VCB'];
+    // 主遮断装置 → CT の順（CT は VCB の負荷側）
+    const order = ['PAS', 'CABLE_HEAD', 'VCT', 'DS', 'VCB', 'CT'];
     const ys = order.map((k) => d.elements.find((e) => e.kind === k)!.y);
     for (let i = 1; i < ys.length; i++) expect(ys[i]!).toBeGreaterThan(ys[i - 1]!);
     // 幹線は同一 x
