@@ -1,6 +1,15 @@
 import type { Point } from '../symbols/types';
 import type { AlignMode, Clipboard } from './diagramOps';
-import type { Element, HvSpec, LvPanelSpec, Project, ProjectMeta, TextItem, Wire } from '../model/types';
+import type {
+  Element,
+  HvSpec,
+  LvPanelSpec,
+  Project,
+  ProjectMeta,
+  SubstationSpec,
+  TextItem,
+  Wire,
+} from '../model/types';
 
 export type Action =
   | { type: 'LOAD_PROJECT'; project: Project }
@@ -10,6 +19,9 @@ export type Action =
   | { type: 'UPDATE_PANEL'; panel: LvPanelSpec }
   | { type: 'ADD_PANEL'; panel: LvPanelSpec }
   | { type: 'REMOVE_PANEL'; id: string }
+  | { type: 'ADD_SUBSTATION'; substation: SubstationSpec }
+  | { type: 'UPDATE_SUBSTATION'; substation: SubstationSpec }
+  | { type: 'REMOVE_SUBSTATION'; id: string }
   | { type: 'REGENERATE' }
   | { type: 'REGENERATE_ONE'; diagramId: string }
   // 図面そのものの操作（仕様に紐づかない図面）

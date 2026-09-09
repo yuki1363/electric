@@ -33,8 +33,24 @@ function fitResult(r: GenResult): GenResult {
 /** 仕様から全図面を生成する（用紙に収める前・等倍） */
 function buildAll(project: Project): GenResult[] {
   const raw: GenResult[] = [];
+  /** 送りに使っている分岐盤 → 副変電所名 */
+  const feedsTo: Record<string, string> = {};
+  for (const sub of project.substations ?? []) {
+    if (sub.sourceFeederId) feedsTo[sub.sourceFeederId] = sub.name;
+  }
   if (project.hv.enabled) {
-    raw.push(...generateHvSld(project.hv, project.meta, project.panels));
+    raw.push(...generateHvSld(project.hv, project.meta, project.panels, undefined, feedsTo));
+  }
+  // 副変電所は受電部の代わりに「送りより」の注記から始める（母線から下は同じ作り）
+  for (const sub of project.substations ?? []) {
+    const feeder = project.hv.feeders.find((f) => f.id === sub.sourceFeederId);
+    raw.push(
+      ...generateHvSld(sub.hv, project.meta, project.panels, {
+        idPrefix: `sub-${sub.id}`,
+        title: `${sub.name} 単線結線図`,
+        fromText: feeder ? `高圧受電盤 ${feeder.name} より` : `${sub.name} 受電`,
+      }),
+    );
   }
   for (const panel of project.panels) {
     // 分岐回路が未入力の盤は図面を作らない（変圧器の給電先としてだけ存在する状態）

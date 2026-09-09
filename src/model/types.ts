@@ -277,6 +277,19 @@ export interface HvSpec {
   nameplates?: Partial<Record<HvSlot, Nameplate>>;
 }
 
+/**
+ * 副変電所。高圧受電盤の「送り」（高圧分岐盤）から高圧で受けて、
+ * その先にまた母線・分岐盤・変圧器を持つ設備。中身は受電設備と同じ構造をそのまま使う。
+ */
+export interface SubstationSpec {
+  id: Id;
+  /** 例: 副変電所No.1 */
+  name: string;
+  /** 電源になる親の高圧分岐盤（送り）の id。未設定なら電源名だけ書く */
+  sourceFeederId?: Id;
+  hv: HvSpec;
+}
+
 // ---------------------------------------------------------------- 低圧分電盤
 
 export type SupplyKind = '1φ2W100' | '1φ2W200' | '1φ3W100/200' | '3φ3W210';
@@ -397,6 +410,8 @@ export interface Project {
   meta: ProjectMeta;
   hv: HvSpec;
   panels: LvPanelSpec[];
+  /** 送りでつながる副変電所 */
+  substations?: SubstationSpec[];
   /** 図面に描かない機器の銘板（制御補機など）。銘板表にのみ出す */
   extraNameplates?: NameplateEntry[];
   diagrams: Diagram[];

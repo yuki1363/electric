@@ -47,35 +47,42 @@ function row(deviceName: string, np: Nameplate | undefined, fallbackRating: stri
  * 銘板が未入力の機器も、定格だけは仕様から埋めて一覧に出す。
  */
 export function nameplateRows(project: Project): NameplateRow[] {
-  const hv = project.hv;
+  const out = hvRows(project.hv, '');
+  for (const sub of project.substations ?? []) out.push(...hvRows(sub.hv, `${sub.name} `));
+  return [...out, ...panelRows(project), ...diagramRows(project), ...extraRows(project)];
+}
+
+/** 高圧設備 1 組ぶんの行。副変電所は備考の頭に盤名を付ける */
+function hvRows(hv: Project['hv'], prefix: string): NameplateRow[] {
   const out: NameplateRow[] = [];
   const np = (slot: HvSlot) => hv.nameplates?.[slot];
+  const g = (s: string) => `${prefix}${s}`;
 
   if (hv.enabled) {
     const incoming = hv.incoming === 'overhead' ? '架空引込' : '地中引込';
     if (hv.pas.kind !== 'none') {
       out.push(
-        row(hv.pas.kind, np('pas'), `7.2kV ${hv.pas.ratedA}A${hv.pas.sog ? ' SOG付' : ''}`, `引込（${incoming}）`),
+        row(hv.pas.kind, np('pas'), `7.2kV ${hv.pas.ratedA}A${hv.pas.sog ? ' SOG付' : ''}`, g(`引込（${incoming}）`)),
       );
     }
-    if (np('dgr')) out.push(row('DGR', np('dgr'), '', '引込'));
+    if (np('dgr')) out.push(row('DGR', np('dgr'), '', g('引込')));
     out.push(
       row(
         '高圧ケーブル',
         np('cable'),
         `${hv.cable.type} ${hv.cable.sq}sq${hv.cable.lengthM ? ` ${hv.cable.lengthM}m` : ''}`,
-        '引込',
+        g('引込'),
       ),
     );
     if (hv.vct) {
-      out.push(row('VCT', np('vct'), '取引用計器', '高圧受電盤'));
-      out.push(row('Wh', np('whTr'), '取引用電力量計', '高圧受電盤'));
+      out.push(row('VCT', np('vct'), '取引用計器', g('高圧受電盤')));
+      out.push(row('Wh', np('whTr'), '取引用電力量計', g('高圧受電盤')));
     }
-    if (hv.ds) out.push(row('DS', np('ds'), '7.2kV', '高圧受電盤'));
-    if (hv.la) out.push(row('LA', np('la'), '', '高圧受電盤'));
+    if (hv.ds) out.push(row('DS', np('ds'), '7.2kV', g('高圧受電盤')));
+    if (hv.la) out.push(row('LA', np('la'), '', g('高圧受電盤')));
     if (hv.metering.vt) {
-      out.push(row('VTヒューズ', np('vtf'), '', '高圧受電盤'));
-      out.push(row('VT', np('vt'), '6600/110V', '高圧受電盤'));
+      out.push(row('VTヒューズ', np('vtf'), '', g('高圧受電盤')));
+      out.push(row('VT', np('vt'), '6600/110V', g('高圧受電盤')));
     }
 
     const meters: [boolean, string, HvSlot][] = [
@@ -87,25 +94,25 @@ export function nameplateRows(project: Project): NameplateRow[] {
       [hv.metering.pf, 'cosφ', 'meterPf'],
       [hv.metering.wh, 'Wh', 'meterWh'],
     ];
-    for (const [on, name, slot] of meters) if (on) out.push(row(name, np(slot), '', '高圧受電盤'));
+    for (const [on, name, slot] of meters) if (on) out.push(row(name, np(slot), '', g('高圧受電盤')));
 
     const mb = hv.mainBreaker;
-    if (mb.ct) out.push(row('CT', np('ct'), mb.ctRatio ?? '', '高圧受電盤'));
+    if (mb.ct) out.push(row('CT', np('ct'), mb.ctRatio ?? '', g('高圧受電盤')));
     for (const r of orderRelays(mb.relays ?? (mb.ocr ? ['OCR'] : []))) {
-      out.push(row(RELAY_SHORT[r], np(relayKey(r) as HvSlot), '', '高圧受電盤'));
+      out.push(row(RELAY_SHORT[r], np(relayKey(r) as HvSlot), '', g('高圧受電盤')));
     }
     for (const dev of orderDevices(mb.devices)) {
-      out.push(row(dev, np(deviceKey(dev) as HvSlot), ratingOf(dev, mb), '高圧受電盤'));
+      out.push(row(dev, np(deviceKey(dev) as HvSlot), ratingOf(dev, mb), g('高圧受電盤')));
     }
 
     for (const f of hv.feeders) {
       const fnp = (k: string) => f.nameplates?.[k];
       for (const dev of orderDevices(f.devices)) {
-        out.push(row(dev, fnp(deviceKey(dev)), ratingOf(dev, f), f.name));
+        out.push(row(dev, fnp(deviceKey(dev)), ratingOf(dev, f), g(f.name)));
       }
-      if (f.ct) out.push(row('CT', fnp('ct'), f.ctRatio ?? '', f.name));
+      if (f.ct) out.push(row('CT', fnp('ct'), f.ctRatio ?? '', g(f.name)));
       for (const r of orderRelays(f.relays ?? (f.ocr ? ['OCR'] : []))) {
-        out.push(row(RELAY_SHORT[r], fnp(relayKey(r)), '', f.name));
+        out.push(row(RELAY_SHORT[r], fnp(relayKey(r)), '', g(f.name)));
       }
       if (f.cable) {
         out.push(
@@ -121,7 +128,7 @@ export function nameplateRows(project: Project): NameplateRow[] {
 
     for (const t of hv.transformers) {
       for (const dev of orderDevices(t.devices)) {
-        out.push(row(dev, t.nameplates?.[deviceKey(dev)], ratingOf(dev, t), t.name));
+        out.push(row(dev, t.nameplates?.[deviceKey(dev)], ratingOf(dev, t), g(t.name)));
       }
       const conn = trConnectionText(t);
       const src = t.externalSource;
@@ -136,13 +143,18 @@ export function nameplateRows(project: Project): NameplateRow[] {
     }
     for (const c of hv.capacitors) {
       for (const dev of orderDevices(c.devices)) {
-        out.push(row(dev, c.nameplates?.[deviceKey(dev)], ratingOf(dev, c), c.name));
+        out.push(row(dev, c.nameplates?.[deviceKey(dev)], ratingOf(dev, c), g(c.name)));
       }
-      if (c.sr) out.push(row('SR', c.nameplates?.sr, '6%', c.name));
-      out.push(row('SC', c.nameplate, `${c.kvar}kvar 6600V`, c.name));
+      if (c.sr) out.push(row('SR', c.nameplates?.sr, '6%', g(c.name)));
+      out.push(row('SC', c.nameplate, `${c.kvar}kvar 6600V`, g(c.name)));
     }
   }
 
+  return out;
+}
+
+function panelRows(project: Project): NameplateRow[] {
+  const out: NameplateRow[] = [];
   for (const p of project.panels) {
     const m = p.main;
     out.push(
@@ -155,8 +167,12 @@ export function nameplateRows(project: Project): NameplateRow[] {
     );
   }
 
-  // 図面で手で足した機器の銘板。
-  // 自動作図の機器は仕様側から出しているので、ここでは origin === 'manual' だけを見る（二重に出さない）
+  return out;
+}
+
+/** 図面で手で足した機器の銘板。自動作図の機器は仕様側から出すので二重に出さない */
+function diagramRows(project: Project): NameplateRow[] {
+  const out: NameplateRow[] = [];
   for (const d of project.diagrams) {
     for (const el of d.elements) {
       if (el.origin !== 'manual') continue;
@@ -167,9 +183,9 @@ export function nameplateRows(project: Project): NameplateRow[] {
     }
   }
 
-  for (const e of project.extraNameplates ?? []) {
-    out.push(row(e.deviceName, e, '', e.group ?? ''));
-  }
-
   return out;
+}
+
+function extraRows(project: Project): NameplateRow[] {
+  return (project.extraNameplates ?? []).map((e) => row(e.deviceName, e, '', e.group ?? ''));
 }

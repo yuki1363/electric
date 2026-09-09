@@ -10,13 +10,14 @@ import type { AppState } from '../state/reducer';
 import { canRedo, canUndo } from '../state/history';
 import { useDispatch } from '../state/context';
 import { newId } from '../model/ids';
-import { createEmptyProject, defaultCircuit, defaultPanel, sampleProject } from '../model/defaults';
+import { createEmptyProject, defaultCircuit, defaultHv, defaultPanel, sampleProject } from '../model/defaults';
 import { parse, projectFileName, serialize } from '../model/project';
 import { downloadBlob, pickFile, readFileAsText } from '../export/download';
 import { titleInfoFromMeta } from '../layout/sheet';
 import { ProjectMetaForm } from './forms/ProjectMetaForm';
 import { HvForm } from './forms/HvForm';
 import { LvPanelForm } from './forms/LvPanelForm';
+import { SubstationForm } from './forms/SubstationForm';
 import { DiagramList } from './panels/DiagramList';
 import { Canvas } from './canvas/Canvas';
 import { REGEN_CONFIRM, REGEN_TITLE } from './panels/DiagramList';
@@ -89,6 +90,25 @@ export function Shell({ state }: { state: AppState }) {
     dispatch({ type: 'ADD_PANEL', panel });
     setSpecNav(panel.id);
   };
+  const addSubstation = () => {
+    const n = (project.substations?.length ?? 0) + 1;
+    // 副変電所は受電部（引込・区分開閉器・取引用計器）を持たない
+    const substation = {
+      id: newId('sub'),
+      name: `副変電所No.${n}`,
+      hv: {
+        ...defaultHv(),
+        pas: { kind: 'none' as const, sog: false, ratedA: 300 },
+        vct: false,
+        transformers: [],
+        capacitors: [],
+        feeders: [],
+      },
+    };
+    dispatch({ type: 'ADD_SUBSTATION', substation });
+    setSpecNav(substation.id);
+  };
+  const substations = project.substations ?? [];
 
   const active = project.diagrams.find((d) => d.id === activeDiagramId);
 
@@ -147,6 +167,13 @@ export function Shell({ state }: { state: AppState }) {
           <aside className="spec-nav">
             <button className={specNav === 'meta' ? 'active' : ''} onClick={() => setSpecNav('meta')}>プロジェクト情報</button>
             <button className={specNav === 'hv' ? 'active' : ''} onClick={() => setSpecNav('hv')}>高圧受電設備</button>
+            <div className="spec-nav-group">副変電所（送りの先）</div>
+            {substations.map((s) => (
+              <button key={s.id} className={specNav === s.id ? 'active sub' : 'sub'} onClick={() => setSpecNav(s.id)}>
+                {s.name}
+              </button>
+            ))}
+            <button className="sub add" onClick={addSubstation}>+ 副変電所を追加</button>
             <div className="spec-nav-group">分電盤</div>
             {project.panels.map((p) => (
               <button key={p.id} className={specNav === p.id ? 'active sub' : 'sub'} onClick={() => setSpecNav(p.id)}>
@@ -158,6 +185,11 @@ export function Shell({ state }: { state: AppState }) {
           <div className="spec-body">
             {specNav === 'meta' && <ProjectMetaForm meta={project.meta} />}
             {specNav === 'hv' && <HvForm hv={project.hv} panels={project.panels} />}
+            {substations
+              .filter((s) => s.id === specNav)
+              .map((s) => (
+                <SubstationForm key={s.id} substation={s} feeders={project.hv.feeders} panels={project.panels} />
+              ))}
             {project.panels
               .filter((p) => p.id === specNav)
               .map((p) => (

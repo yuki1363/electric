@@ -80,6 +80,20 @@ export function reducer(state: AppState, action: Action): AppState {
       return commit(markStale({ ...p, panels: [...p.panels, action.panel] }));
     case 'REMOVE_PANEL':
       return commit(markStale({ ...p, panels: p.panels.filter((x) => x.id !== action.id) }));
+    case 'ADD_SUBSTATION':
+      return commit(markStale({ ...p, substations: [...(p.substations ?? []), action.substation] }));
+    case 'UPDATE_SUBSTATION':
+      return commit(
+        markStale({
+          ...p,
+          substations: (p.substations ?? []).map((s) => (s.id === action.substation.id ? action.substation : s)),
+        }),
+      );
+    case 'REMOVE_SUBSTATION': {
+      const next = markStale({ ...p, substations: (p.substations ?? []).filter((s) => s.id !== action.id) });
+      // 図面も消す（regenerateAll は仕様から消えた図面を落とすが、free 図面は残るため明示的に）
+      return commit({ ...next, diagrams: next.diagrams.filter((d) => !d.id.startsWith(`sub-${action.id}`)) });
+    }
     case 'REGENERATE': {
       const r = regenerateProject(p);
       return commit(r.project, r.warnings);

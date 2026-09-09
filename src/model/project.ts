@@ -135,8 +135,32 @@ export function parse(text: string): Project {
     const base = defaultPanel(p.id, typeof p.name === 'string' ? p.name : `L-${i + 1}`);
     return { ...base, ...p, circuits: Array.isArray(p.circuits) ? p.circuits : [] } as Project['panels'][number];
   });
+  // 副変電所。中身は受電設備と同じ構造なので同じ移行を通す
+  const substations = Array.isArray(raw.substations)
+    ? raw.substations
+        .filter((s): s is Record<string, unknown> => isObj(s) && typeof s.id === 'string')
+        .map(
+          (s, i) =>
+            ({
+              ...s,
+              name: typeof s.name === 'string' ? s.name : `副変電所No.${i + 1}`,
+              hv: {
+                ...defaultHv(),
+                ...migrateHv(isObj(s.hv) ? s.hv : {}),
+              },
+            }) as NonNullable<Project['substations']>[number],
+        )
+    : undefined;
   const extraNameplates = Array.isArray(raw.extraNameplates)
     ? (raw.extraNameplates as Project['extraNameplates'])
     : undefined;
-  return { version: 1, meta, hv, panels, ...(extraNameplates ? { extraNameplates } : {}), diagrams };
+  return {
+    version: 1,
+    meta,
+    hv,
+    panels,
+    ...(substations && substations.length > 0 ? { substations } : {}),
+    ...(extraNameplates ? { extraNameplates } : {}),
+    diagrams,
+  };
 }

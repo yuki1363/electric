@@ -153,7 +153,23 @@ function neededPitch(hv: HvSpec): number {
   return Math.max(BP_MIN, Math.ceil(need / GRID) * GRID);
 }
 
-export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[]): GenResult[] {
+/** 副変電所として描くときの見出し。省略すると受電設備（引込あり）として描く */
+export interface HvSource {
+  /** 図面 id の接頭辞（副変電所ごとに分ける） */
+  idPrefix: string;
+  /** 図面名 */
+  title: string;
+  /** 引込部の代わりに出す注記。例: 「高圧受電盤 送りNo.2 より」 */
+  fromText: string;
+}
+
+export function generateHvSld(
+  hv: HvSpec,
+  meta: ProjectMeta,
+  panels: LvPanelSpec[],
+  source?: HvSource,
+  feedsTo?: Record<string, string>,
+): GenResult[] {
   const g = sheetGeom(meta.sheet);
   const groups = buildGroups(hv);
   const minPitch = neededPitch(hv);
@@ -189,8 +205,10 @@ export function generateHvSld(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec
       groups: pageGroups,
       page: i + 1,
       pageCount,
-      id: `hv-sld${pageCount > 1 ? `-p${i + 1}` : ''}`,
+      id: `${source?.idPrefix ?? 'hv-sld'}${pageCount > 1 ? `-p${i + 1}` : ''}`,
       minPitch,
+      ...(source ? { source } : {}),
+      ...(feedsTo ? { feedsTo } : {}),
     }),
   );
   if (pageCount > 1) {
@@ -208,6 +226,10 @@ interface HvPageOpts {
   id: string;
   /** 列の間隔の下限（いちばん長いラベルが隣にかからない幅） */
   minPitch: number;
+  /** 副変電所として描くとき */
+  source?: HvSource;
+  /** 分岐盤 id → その送りがつながる副変電所名 */
+  feedsTo?: Record<string, string>;
 }
 
 function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: HvPageOpts): GenResult {
@@ -217,7 +239,7 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
   const withModel = (labels: string[], np?: { model?: string }): string[] =>
     meta.showModels && np?.model ? [...labels, np.model] : labels;
   const g = sheetGeom(sheet);
-  const b = new DiagramBuilder(o.id, 'hv-sld', '高圧受電設備 単線結線図', sheet);
+  const b = new DiagramBuilder(o.id, 'hv-sld', o.source?.title ?? '高圧受電設備 単線結線図', sheet);
 
   let y = 30;
   let prev: Element | null = null;
@@ -225,7 +247,13 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
   // 引込（1 枚目だけ）
   const leadIn = { x: TX, y: 15 };
   if (first) {
-    b.text(TX + 5, 16, `6.6kV 引込（${hv.incoming === 'overhead' ? '架空' : '地中'}）`, TEXT.name, 'start');
+    b.text(
+      TX + 5,
+      16,
+      o.source ? o.source.fromText : `6.6kV 引込（${hv.incoming === 'overhead' ? '架空' : '地中'}）`,
+      TEXT.name,
+      'start',
+    );
   }
 
   const place = (kind: SK, labels: string[], props?: Element['props']): Element => {
@@ -432,7 +460,7 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     const bus0 = b.el('JUNCTION', TX, busY);
     if (prev) b.wire(prev, 'S', bus0, 'N');
   } else {
-    b.text(g.drawable.x1 + 5, 30, '高圧受電設備 単線結線図（続き）', TEXT.title, 'start');
+    b.text(g.drawable.x1 + 5, 30, `${o.source?.title ?? '高圧受電設備 単線結線図'}（続き）`, TEXT.title, 'start');
     b.text(
       g.drawable.x1 + 5,
       busY - 5,
@@ -719,7 +747,8 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       if (!isEmptyBBox(box)) {
         const r = inflate(box, 4);
         b.shape(...dashedRect(r.minX, busY + 6, r.maxX, r.maxY));
-        b.text(r.minX, busY + 3, g0.feeder.name, TEXT.rating, 'start');
+        const feedTo = o.feedsTo?.[g0.feeder.id];
+        b.text(r.minX, busY + 3, feedTo ? `${g0.feeder.name} → ${feedTo}` : g0.feeder.name, TEXT.rating, 'start');
       }
     }
     busEndX = Math.max(busEndX, startX + (nCols - 1) * bp + 15);

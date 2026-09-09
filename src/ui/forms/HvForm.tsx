@@ -34,9 +34,26 @@ const SECONDARY_OPTIONS = ['105-210V', '210V', '105V', '420V', '440V', '400V', '
 /** 一次電圧の入力候補。低圧用変圧器も作れるよう任意の値を入れられる */
 const PRIMARY_OPTIONS = ['6.6kV', '440V', '420V', '400V', '210V'];
 
-export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
+export function HvForm({
+  hv,
+  panels,
+  onChange,
+  variant = 'main',
+}: {
+  hv: HvSpec;
+  panels: LvPanelSpec[];
+  /** 保存先。副変電所のときは親から差し替える（既定は受電設備そのもの） */
+  onChange?: (next: HvSpec) => void;
+  /** substation では引込・区分開閉器・取引用計器を出さない（送りから受けるため） */
+  variant?: 'main' | 'substation';
+}) {
   const dispatch = useDispatch();
-  const set = (patch: Partial<HvSpec>) => dispatch({ type: 'SET_HV', hv: { ...hv, ...patch } });
+  const set = (patch: Partial<HvSpec>) => {
+    const next = { ...hv, ...patch };
+    if (onChange) onChange(next);
+    else dispatch({ type: 'SET_HV', hv: next });
+  };
+  const isSub = variant === 'substation';
 
   const setTr = (id: string, patch: Partial<TransformerSpec>) =>
     set({ transformers: hv.transformers.map((t) => (t.id === id ? { ...t, ...patch } : t)) });
@@ -171,12 +188,16 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
           <option key={v} value={v} />
         ))}
       </datalist>
-      <Section title="高圧受電設備">
-        <Row label="高圧受電図を作成">
-          <CheckField checked={hv.enabled} onChange={(v) => set({ enabled: v })} label="有効（6.6kV 受電）" />
+      <Section title={isSub ? 'この副変電所の単線結線図' : '高圧受電設備'}>
+        <Row label={isSub ? '図面を作成' : '高圧受電図を作成'}>
+          <CheckField
+            checked={hv.enabled}
+            onChange={(v) => set({ enabled: v })}
+            label={isSub ? '有効' : '有効（6.6kV 受電）'}
+          />
         </Row>
       </Section>
-      {hv.enabled && (
+      {hv.enabled && !isSub && (
         <>
           <Section title="引込・区分開閉器">
             <Row label="引込方式">
@@ -208,10 +229,35 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
               長さ <NumberField value={hv.cable.lengthM} allowEmpty onCommit={(v) => set({ cable: { ...hv.cable, ...(v === undefined ? { lengthM: undefined } : { lengthM: v }) } })} /> m
             </Row>
           </Section>
+        </>
+      )}
+      {hv.enabled && (
+        <>
+          {isSub && (
+            <Section title="受電ケーブル">
+              <Row label="ケーブル">
+                <TextField value={hv.cable.type} onCommit={(v) => set({ cable: { ...hv.cable, type: v } })} width={70} />{' '}
+                <NumberField value={hv.cable.sq} onCommit={(v) => set({ cable: { ...hv.cable, sq: v ?? 38 } })} /> sq{' '}
+                長さ{' '}
+                <NumberField
+                  value={hv.cable.lengthM}
+                  allowEmpty
+                  onCommit={(v) =>
+                    set({ cable: { ...hv.cable, ...(v === undefined ? { lengthM: undefined } : { lengthM: v }) } })
+                  }
+                />{' '}
+                m
+              </Row>
+            </Section>
+          )}
 
-          <Section title="受電設備">
+          <Section title={isSub ? '受電部' : '受電設備'}>
             <Row label="機器">
-              <CheckField checked={hv.vct} onChange={(v) => set({ vct: v })} label="VCT + 取引用電力量計" />{' '}
+              {!isSub && (
+                <>
+                  <CheckField checked={hv.vct} onChange={(v) => set({ vct: v })} label="VCT + 取引用電力量計" />{' '}
+                </>
+              )}
               <CheckField checked={hv.ds} onChange={(v) => set({ ds: v })} label="DS（断路器）" />{' '}
               <CheckField checked={hv.la} onChange={(v) => set({ la: v })} label="LA（避雷器）" />
             </Row>
