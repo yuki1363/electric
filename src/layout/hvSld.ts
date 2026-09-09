@@ -658,6 +658,14 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
    */
   const drawLeaf = (leaf: Leaf, bx: number, width: number, topY: number) => {
     const cx = snapValue(bx + ((width - 1) * bp) / 2, GRID);
+    if (leaf.kind === 'tr' && leaf.node.spec.externalSource) {
+      // 母線につながない電源（非常電源盤など）。真上に引き込み線と名前を描く
+      const ext = leaf.node.spec.externalSource;
+      const topEl = b.el('INCOMING', cx, topY + 5);
+      b.textLines(cx + 6, topY + 2, [ext.name, ext.ratingText ?? ''].filter(Boolean), TEXT.rating, 'start');
+      drawTr(leaf.node, bx, width, topEl, 0);
+      return;
+    }
     const j = b.el('JUNCTION', cx, topY);
     if (leaf.kind === 'tr') {
       drawTr(leaf.node, bx, width, j, 0);

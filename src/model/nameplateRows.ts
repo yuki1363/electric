@@ -124,12 +124,13 @@ export function nameplateRows(project: Project): NameplateRow[] {
         out.push(row(dev, t.nameplates?.[deviceKey(dev)], ratingOf(dev, t), t.name));
       }
       const conn = trConnectionText(t);
+      const src = t.externalSource;
       out.push(
         row(
           'Tr',
           t.nameplate,
           `${t.phase} ${t.kva}kVA ${t.primary || '6.6kV'}/${t.secondary}${conn ? ` ${conn}` : ''}`,
-          t.name,
+          src ? `${t.name}（${src.name}）` : t.name,
         ),
       );
     }

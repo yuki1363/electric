@@ -171,6 +171,11 @@ export interface TransformerSpec {
    * 6600 → 440 → 440 → 220 のように、高圧単線結線図の中で数珠つなぎに描く。
    */
   sourceTransformerId?: Id;
+  /**
+   * 高圧母線・分岐盤・他の変圧器のどれでもない電源（非常電源盤・発電機盤など）。
+   * 母線につながず、変圧器の真上に引き込み線と名前を描く。
+   */
+  externalSource?: { name: string; ratingText?: string };
   /** 変圧器本体の銘板 */
   nameplate?: Nameplate;
   /** 開閉装置ごとの銘板。キーは機器名の小文字（lbs / pf / vcs / vcb / pc） */

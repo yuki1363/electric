@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { generateHvSld } from '../src/layout/hvSld';
 import { sampleProject } from '../src/model/defaults';
+import { nameplateRows } from '../src/model/nameplateRows';
 import { sheetGeom } from '../src/layout/constants';
 import { isOrthogonal } from '../src/layout/router';
 import { isPortEnd, type SwitchDevice } from '../src/model/types';
@@ -611,5 +612,34 @@ describe('高圧分岐盤', () => {
     const rs = generateHvSld(orphan, p.meta, p.panels);
     expect(rs[0]!.warnings).toEqual([]);
     expect(rs[0]!.diagram.elements.filter((e) => e.kind.startsWith('TR_')).length).toBe(p.hv.transformers.length);
+  });
+});
+
+describe('その他の電源（自由入力）', () => {
+  const p = sampleProject();
+
+  it('母線につながず、真上に引き込み線と名前が出る', () => {
+    const hv = structuredClone(p.hv);
+    hv.transformers[0]!.externalSource = { name: '非常電源盤', ratingText: '600V 600A' };
+    const d = generateHvSld(hv, p.meta, p.panels)[0]!.diagram;
+    const tr = d.elements.find((e) => e.labels[0] === 'Tr-1')!;
+    // 引き込み記号が同じ列の上にある
+    const inc = d.elements.find((e) => e.kind === 'INCOMING' && Math.abs(e.x - tr.x) < 1);
+    expect(inc).toBeTruthy();
+    expect(inc!.y).toBeLessThan(tr.y);
+    expect(d.texts.some((t) => t.text === '非常電源盤')).toBe(true);
+    expect(d.texts.some((t) => t.text === '600V 600A')).toBe(true);
+    // 母線とはつながらない（同じ列に母線への接続点が無い）
+    const busY = Math.max(...d.wires.filter((w) => w.style === 'bus').flatMap((w) => w.points.map((q) => q.y)));
+    expect(d.elements.some((e) => e.kind === 'JUNCTION' && Math.abs(e.x - tr.x) < 1 && Math.abs(e.y - busY) < 1)).toBe(
+      false,
+    );
+  });
+
+  it('銘板表の備考に電源名が出る', () => {
+    const hv = structuredClone(p.hv);
+    hv.transformers[0]!.externalSource = { name: 'DTMC' };
+    const rows = nameplateRows({ ...p, hv });
+    expect(rows.some((r) => r.note === 'Tr-1（DTMC）')).toBe(true);
   });
 });

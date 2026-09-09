@@ -453,16 +453,26 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                     </td>
                     <td>
                       <select
-                        value={t.sourceTransformerId ? `t:${t.sourceTransformerId}` : t.feederId ? `f:${t.feederId}` : ''}
+                        value={
+                          t.externalSource
+                            ? 'x'
+                            : t.sourceTransformerId
+                              ? `t:${t.sourceTransformerId}`
+                              : t.feederId
+                                ? `f:${t.feederId}`
+                                : ''
+                        }
                         onChange={(e) => {
                           const v = e.target.value;
                           setTr(t.id, {
                             feederId: v.startsWith('f:') ? v.slice(2) : undefined,
                             sourceTransformerId: v.startsWith('t:') ? v.slice(2) : undefined,
+                            externalSource: v === 'x' ? (t.externalSource ?? { name: '非常電源盤' }) : undefined,
                           });
                         }}
                       >
                         <option value="">高圧母線に直結</option>
+                        <option value="x">その他の電源（名前を入力）</option>
                         {hv.feeders.length > 0 && (
                           <optgroup label="高圧分岐盤">
                             {hv.feeders.map((f) => (
@@ -480,6 +490,24 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                           </optgroup>
                         )}
                       </select>
+                      {t.externalSource && (
+                        <div className="ext-source">
+                          <TextField
+                            value={t.externalSource.name}
+                            width={110}
+                            placeholder="非常電源盤・DTMC など"
+                            onCommit={(v) => setTr(t.id, { externalSource: { ...t.externalSource!, name: v } })}
+                          />
+                          <TextField
+                            value={t.externalSource.ratingText ?? ''}
+                            width={90}
+                            placeholder="600V 600A"
+                            onCommit={(v) =>
+                              setTr(t.id, { externalSource: { ...t.externalSource!, ratingText: v || undefined } })
+                            }
+                          />
+                        </div>
+                      )}
                     </td>
                     <td>
                       <select value={t.feeds ?? ''} onChange={(e) => setTr(t.id, e.target.value ? { feeds: e.target.value } : { feeds: undefined })}>
