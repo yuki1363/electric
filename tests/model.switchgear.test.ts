@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   SWITCH_DEVICES,
   deviceLabel,
+  deviceSymbol,
   hasBreakingKA,
   hasFuse,
+  isLvDevice,
   migrateDevices,
   orderDevices,
   switchSummary,
@@ -70,7 +72,7 @@ describe('開閉装置の組み合わせ', () => {
   });
 
   it('選べる機器と並び順', () => {
-    expect(SWITCH_DEVICES).toEqual(['LBS_PF', 'LBS', 'VCB', 'PC', 'PF', 'VCS']);
+    expect(SWITCH_DEVICES).toEqual(['DTMC', 'LBS_PF', 'LBS', 'VCB', 'MCCB', 'PC', 'PF', 'VCS']);
   });
 
   it('PF付LBS は 1 台でヒューズ込み', () => {
@@ -133,5 +135,26 @@ describe('銘板表の分岐盤の行', () => {
     expect(names).toContain('SC-1/SR');
     expect(names).toContain('SC-1/SC');
     expect(nameplateRows({ ...p, hv }).find((r) => r.deviceName === 'LBS')!.model).toBe('LBS-6A');
+  });
+});
+
+describe('MCCB・DTMC', () => {
+  it('MCCB は配線用遮断器の図記号を使い、遮断容量を持つ', () => {
+    expect(deviceSymbol('MCCB')).toBe('MCB');
+    expect(deviceSymbol('VCB')).toBe('VCB');
+    expect(hasBreakingKA(['MCCB'])).toBe(true);
+    expect(deviceLabel('MCCB', { ratedA: 100, breakingKA: 2.5 })).toEqual(['MCCB 100A', '2.5kA']);
+  });
+
+  it('DTMC は自前の図記号を持ち、いちばん上流に並ぶ', () => {
+    expect(deviceSymbol('DTMC')).toBe('DTMC');
+    expect(orderDevices(['MCCB', 'DTMC'])).toEqual(['DTMC', 'MCCB']);
+    expect(deviceLabel('DTMC', { ratedA: 600 })).toEqual(['DTMC 600A']);
+  });
+
+  it('低圧の機器は 600V 系として扱う', () => {
+    expect(isLvDevice('MCCB')).toBe(true);
+    expect(isLvDevice('DTMC')).toBe(true);
+    expect(isLvDevice('VCB')).toBe(false);
   });
 });

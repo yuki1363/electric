@@ -1,5 +1,5 @@
 import type { Element, HvSlot, HvSpec, LvPanelSpec, ProjectMeta } from '../model/types';
-import { deviceKey, deviceLabel, orderDevices, type SwitchDevice } from '../model/switchgear';
+import { deviceKey, deviceLabel, deviceSymbol, orderDevices, type SwitchDevice } from '../model/switchgear';
 import type { SymbolKind as SK } from '../symbols/types';
 import { DiagramBuilder } from './builder';
 import { bboxOfPrims, emptyBBox, inflate, isEmptyBBox, union } from '../geom/bbox';
@@ -358,7 +358,7 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     // CT を主遮断装置の負荷側に置くと、遮断器を開けば CT 以降が無充電になる（分岐盤の見出しと同じ並び）
     const mb = hv.mainBreaker;
     for (const dev of orderDevices(mb.devices)) {
-      place(dev, withModel(deviceLabel(dev, mb), hv.nameplates?.[deviceKey(dev) as HvSlot]), {
+      place(deviceSymbol(dev), withModel(deviceLabel(dev, mb), hv.nameplates?.[deviceKey(dev) as HvSlot]), {
         ratedA: mb.ratedA,
         ...(mb.breakingKA ? { breakingKA: mb.breakingKA } : {}),
       });
@@ -462,11 +462,12 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     let last: Element = j;
 
     for (const dev of orderDevices(f.devices)) {
-      const el = b.el(dev, cx, yy + 20, {
+      const el = b.el(deviceSymbol(dev), cx, yy + 20, {
         labels: withModel(deviceLabel(dev, f), fnp(deviceKey(dev))),
         ...(dev === 'PF' || dev === 'PC' ? {} : { props: { ratedA: f.ratedA } }),
       });
       b.wire(last, 'S', el, 'N');
+      if (dev === 'DTMC') drawGenFeed(el);
       last = el;
       yy += 20;
     }
@@ -509,6 +510,12 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     b.wire(last, 'S', arrow, 'N');
   };
 
+  /** 切替開閉器（DTMC）の発電系統側に引き出し線と注記を出す */
+  const drawGenFeed = (el: Element) => {
+    b.wireToPoint(el, 'W', { x: el.x - 25, y: el.y - 5 });
+    b.text(el.x - 27, el.y - 6, '発電系統', TEXT.rating, 'end');
+  };
+
   /** 開閉装置（＋直列リアクトル）を基準線の直上に下詰めで積む */
   const drawStack = (
     from: Element,
@@ -518,10 +525,12 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     extra: { kind: SK; labels: string[] }[] = [],
   ): Element => {
     const np = (k: string) => spec.nameplates?.[k];
-    const stack: { kind: SK; labels: string[] }[] = [
+    const stack: { kind: SK; labels: string[]; gen?: boolean }[] = [
       ...orderDevices(spec.devices).map((dev) => ({
-        kind: dev as SK,
+        kind: deviceSymbol(dev),
         labels: withModel(deviceLabel(dev, { pfA: spec.pfA }), np(deviceKey(dev))),
+        // 切替開閉器は発電系統からの引き込みを左に出す
+        ...(dev === 'DTMC' ? { gen: true } : {}),
       })),
       ...extra,
     ];
@@ -529,6 +538,7 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     stack.forEach((item, i) => {
       const el = b.el(item.kind, bx, baseYs[level]! - (stack.length - i) * TP, { labels: item.labels });
       b.wire(last, 'S', el, 'N');
+      if (item.gen) drawGenFeed(el);
       last = el;
     });
     return last;

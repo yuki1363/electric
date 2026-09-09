@@ -1,5 +1,5 @@
 import type { HvSlot, Nameplate, Project } from './types';
-import { deviceKey, deviceLabel, orderDevices } from './switchgear';
+import { deviceKey, deviceLabel, isLvDevice, orderDevices } from './switchgear';
 import { getSymbol } from '../symbols';
 import type { SwitchDevice } from './switchgear';
 
@@ -19,10 +19,11 @@ export interface NameplateRow {
   qty: number;
 }
 
-/** 開閉装置の定格表記。図面ラベルと同じ内容を 6.6kV 系の表記にする */
+/** 開閉装置の定格表記。図面ラベルと同じ内容に電圧階級を足す（低圧の機器は 600V 系） */
 function ratingOf(dev: SwitchDevice, o: { ratedA?: number; breakingKA?: number; pfA?: number }): string {
   const label = deviceLabel(dev, o).join(' ').replace(new RegExp(`^${dev}\\s*`), '');
-  return label ? `7.2kV ${label}` : '';
+  if (!label) return '';
+  return `${isLvDevice(dev) ? '600V' : '7.2kV'} ${label}`;
 }
 
 function row(deviceName: string, np: Nameplate | undefined, fallbackRating: string, group: string): NameplateRow {

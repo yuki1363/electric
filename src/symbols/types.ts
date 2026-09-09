@@ -76,6 +76,7 @@ export type SymbolKind =
   // 低圧
   | 'MCB'
   | 'ELB'
+  | 'DTMC'
   | 'TERMINAL'
   | 'LOAD_ARROW'
   // 計器

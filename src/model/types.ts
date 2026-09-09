@@ -75,6 +75,8 @@ export type HvSlot =
   | 'meterPf'
   | 'meterWh'
   | 'as'
+  | 'mccb'
+  | 'dtmc'
   | 'vs';
 
 export const HV_SLOT_LABEL: Record<HvSlot, string> = {
@@ -93,6 +95,8 @@ export const HV_SLOT_LABEL: Record<HvSlot, string> = {
   vcs: '真空電磁接触器 (VCS)',
   pc: '高圧カットアウト (PC)',
   lbs_pf: 'PF付負荷開閉器 (LBS)',
+  mccb: '配線用遮断器 (MCCB)',
+  dtmc: '切替開閉器 (DTMC)',
   zct: '零相変流器 (ZCT)',
   vtf: 'VT ヒューズ',
   whTr: '取引用電力量計 (Wh)',

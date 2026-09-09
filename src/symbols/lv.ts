@@ -60,4 +60,28 @@ export const LOAD_ARROW: SymbolDef = {
   defaultLabels: [],
 };
 
-export const LV_SYMBOLS: SymbolDef[] = [MCB, ELB, TERMINAL, LOAD_ARROW];
+/**
+ * ダブルスロー切替開閉器 DTMC: 発電系統と受電系統の切替。
+ * 下の共通端子から刃が伸び、上（受電側）と左（発電側）の 2 つの固定接点のどちらかに倒れる。
+ * 受電側を中心線に置くので、縦に積んだ機器とそのままつながる。
+ */
+export const DTMC: SymbolDef = {
+  kind: 'DTMC',
+  nameJa: '切替開閉器 (DTMC・ダブルスロー)',
+  category: 'lv',
+  bbox: { w: 20, h: 20 },
+  prims: [
+    ...bladePrims(), // 受電側（上）の固定接点と刃・負荷側リード
+    L(-10, -5, -4, -5), // 発電側（左）の固定接点とリード
+    C(0, 4, 0.9, true), // 支点
+  ],
+  ports: [
+    { id: 'N', x: 0, y: -10, dir: 'N' },
+    { id: 'W', x: -10, y: -5, dir: 'W' },
+    { id: 'S', x: 0, y: 10, dir: 'S' },
+  ],
+  labelAnchor: rightLabel(20),
+  defaultLabels: ['DTMC'],
+};
+
+export const LV_SYMBOLS: SymbolDef[] = [MCB, ELB, DTMC, TERMINAL, LOAD_ARROW];

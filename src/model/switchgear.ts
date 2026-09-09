@@ -1,15 +1,22 @@
+import type { SymbolKind } from '../symbols/types';
+
 /**
  * 高圧の開閉装置。
  * 変圧器・進相コンデンサ・高圧分岐盤・受電盤の主遮断装置で、同じ機器を自由に組み合わせられる。
  * 「どの機器をどの順に直列に並べるか」をここ 1 か所で決める。
  */
 
-export type SwitchDevice = 'LBS_PF' | 'LBS' | 'VCB' | 'PC' | 'PF' | 'VCS';
+export type SwitchDevice = 'DTMC' | 'LBS_PF' | 'LBS' | 'VCB' | 'MCCB' | 'PC' | 'PF' | 'VCS';
 
-/** 上流から下流への並び順。選んだ機器はこの順に描く */
-export const SWITCH_DEVICES: SwitchDevice[] = ['LBS_PF', 'LBS', 'VCB', 'PC', 'PF', 'VCS'];
+/** 上流から下流への既定の並び順。チェックを入れたときはこの位置に差し込む */
+export const SWITCH_DEVICES: SwitchDevice[] = ['DTMC', 'LBS_PF', 'LBS', 'VCB', 'MCCB', 'PC', 'PF', 'VCS'];
+
+/** 低圧（600V 系）の機器。定格の表記を 6.6kV 系と分ける */
+export const LV_DEVICES: SwitchDevice[] = ['MCCB', 'DTMC'];
 
 export const SWITCH_DEVICE_LABEL: Record<SwitchDevice, string> = {
+  DTMC: 'DTMC（ダブルスロー切替開閉器・発電／受電）',
+  MCCB: 'MCCB（配線用遮断器・低圧）',
   LBS_PF: 'PF付LBS（限流ヒューズ付負荷開閉器・1 台）',
   LBS: 'LBS（負荷開閉器）',
   VCB: 'VCB（真空遮断器）',
@@ -20,6 +27,8 @@ export const SWITCH_DEVICE_LABEL: Record<SwitchDevice, string> = {
 
 /** チェックボックスや要約に出す短い名前 */
 export const SWITCH_DEVICE_SHORT: Record<SwitchDevice, string> = {
+  DTMC: 'DTMC',
+  MCCB: 'MCCB',
   LBS_PF: 'PF付LBS',
   LBS: 'LBS',
   VCB: 'VCB',
@@ -56,9 +65,21 @@ export function hasFuse(devs: readonly SwitchDevice[] | undefined): boolean {
   return o.includes('PF') || o.includes('LBS_PF');
 }
 
-/** 遮断容量の入力が要るか */
+/** 遮断容量の入力が要るか（真空遮断器・配線用遮断器） */
 export function hasBreakingKA(devs: readonly SwitchDevice[] | undefined): boolean {
-  return orderDevices(devs).includes('VCB');
+  const o = orderDevices(devs);
+  return o.includes('VCB') || o.includes('MCCB');
+}
+
+/** 低圧の機器か（定格の頭に 7.2kV を付けない） */
+export const isLvDevice = (dev: SwitchDevice): boolean => LV_DEVICES.includes(dev);
+
+/**
+ * 図記号の名前。SwitchDevice と SymbolKind は基本同じだが、
+ * MCCB は既存の配線用遮断器（MCB）の図記号をそのまま使う。
+ */
+export function deviceSymbol(dev: SwitchDevice): SymbolKind {
+  return dev === 'MCCB' ? 'MCB' : dev;
 }
 
 /** 図面ラベル。定格が分からない場合（分岐の開閉器など）は機器名だけにする */
@@ -74,8 +95,8 @@ export function deviceLabel(
     const a = o.pfA ?? o.ratedA;
     return [a ? `PC ${a}A` : 'PC'];
   }
-  if (dev === 'VCB') {
-    return [o.ratedA ? `VCB ${o.ratedA}A` : 'VCB', o.breakingKA ? `${o.breakingKA}kA` : ''].filter(Boolean);
+  if (dev === 'VCB' || dev === 'MCCB') {
+    return [o.ratedA ? `${dev} ${o.ratedA}A` : dev, o.breakingKA ? `${o.breakingKA}kA` : ''].filter(Boolean);
   }
   return [o.ratedA ? `${dev} ${o.ratedA}A` : dev];
 }

@@ -40,6 +40,20 @@ describe('高圧受電設備 単線結線図 生成', () => {
     expect(count('GROUND_A')).toBe(1);
   });
 
+  it('MCCB は配線用遮断器の図記号、DTMC は発電系統への引き出し線を持つ', () => {
+    const hv = structuredClone(p.hv);
+    hv.transformers[0]!.devices = ['DTMC', 'MCCB'] as SwitchDevice[];
+    const d2 = generateHvSld(hv, p.meta, p.panels)[0]!.diagram;
+    const dtmc = d2.elements.find((e) => e.kind === 'DTMC')!;
+    expect(dtmc).toBeTruthy();
+    expect(d2.elements.some((e) => e.kind === 'MCB' && e.labels.some((l) => l.startsWith('MCCB')))).toBe(true);
+    // 発電系統の注記と、そこへ伸びる線がある
+    expect(d2.texts.some((t) => t.text === '発電系統')).toBe(true);
+    expect(
+      d2.wires.some((w) => w.points.some((p) => p.x < dtmc.x - 20 && Math.abs(p.y - (dtmc.y - 5)) < 1)),
+    ).toBe(true);
+  });
+
   it('CT は主遮断装置と高圧母線の間に入り、VT 二次の横母線が母線と重ならない', () => {
     const vcb = d.elements.find((e) => e.kind === 'VCB')!;
     const ct = d.elements.find((e) => e.kind === 'CT')!;
