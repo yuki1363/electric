@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { DiagramBuilder } from '../src/layout/builder';
 import { defaultSheet } from '../src/layout/constants';
-import { alignItems, distributeItems, insertIntoWire } from '../src/state/diagramOps';
+import {
+  alignItems,
+  copyItems,
+  distributeItems,
+  duplicateItems,
+  insertIntoWire,
+  moveWireSegment,
+  nearestSegment,
+  pasteItems,
+} from '../src/state/diagramOps';
 import { isPortEnd, type Diagram, type Element } from '../src/model/types';
 import { isOrthogonal } from '../src/layout/router';
 import { elementBBox, elementPort } from '../src/layout/builder';
@@ -222,5 +231,75 @@ describe('整列', () => {
     const out = alignItems(d, new Set([a.id, b2.id]), 'centerX');
     // 中心線をそろえると真っすぐになる
     expect(new Set(out.wires[0]!.points.map((p) => p.x)).size).toBe(1);
+  });
+});
+
+describe('線分ドラッグ・複製・コピー＆ペースト', () => {
+  /** 縦 → 横 → 縦 の Z 字配線を 1 本持つ図面 */
+  const zDiagram = (): Diagram => {
+    const bd = new DiagramBuilder('t', 'free', 'テスト', defaultSheet('A3'));
+    const a = bd.el('DS', 100, 100, { labels: [] });
+    const b = bd.el('DS', 140, 160, { labels: [] });
+    bd.wire(a, 'S', b, 'N');
+    return bd.build();
+  };
+
+  it('中ほどの線分を動かすと曲がりの位置だけ変わり、両端は動かない', () => {
+    const d = zDiagram();
+    const w0 = d.wires[0]!;
+    const seg = nearestSegment(w0, { x: 120, y: w0.points[2]!.y })!;
+    expect(seg.dir).toBe('h');
+    const out = moveWireSegment(d, w0.id, seg.index, 10);
+    const w1 = out.wires[0]!;
+    expect(w1.manual).toBe(true);
+    expect(w1.points[0]).toEqual(w0.points[0]);
+    expect(w1.points[w1.points.length - 1]).toEqual(w0.points[w0.points.length - 1]);
+    // 横線分が 10mm 下がる
+    expect(w1.points[2]!.y).toBe(w0.points[2]!.y + 10);
+    expect(isOrthogonal(w1.points)).toBe(true);
+  });
+
+  it('端の線分を動かしても端子の座標は変わらない', () => {
+    const d = zDiagram();
+    const w0 = d.wires[0]!;
+    const out = moveWireSegment(d, w0.id, 0, 8);
+    const w1 = out.wires[0]!;
+    expect(w1.points[0]).toEqual(w0.points[0]);
+    expect(w1.points[w1.points.length - 1]).toEqual(w0.points[w0.points.length - 1]);
+    expect(isOrthogonal(w1.points)).toBe(true);
+  });
+
+  it('複製すると id が変わり、配線のつなぎ先も複製側を向く', () => {
+    const d = zDiagram();
+    const ids = new Set(d.elements.map((e) => e.id));
+    const r = duplicateItems(d, ids, 20, 20);
+    expect(r.diagram.elements.length).toBe(4);
+    expect(r.diagram.wires.length).toBe(2);
+    const copied = r.diagram.elements.filter((e) => e.origin === 'manual');
+    expect(copied.length).toBe(2);
+    expect(copied[0]!.x).toBe(d.elements[0]!.x + 20);
+    const newWire = r.diagram.wires[1]!;
+    const ends = [newWire.from, newWire.to].filter(isPortEnd).map((e) => e.elementId);
+    expect(ends.every((id) => copied.some((c) => c.id === id))).toBe(true);
+  });
+
+  it('コピーした内容は貼り付け先の縮尺に合わせる', () => {
+    const d = zDiagram();
+    const clip = copyItems(d, new Set(d.elements.map((e) => e.id)))!;
+    expect(clip.scale).toBe(1);
+    const half: Diagram = { ...zDiagram(), scale: 0.5, elements: [], wires: [], texts: [] };
+    const r = pasteItems(half, clip, { x: 0, y: 0 });
+    expect(r.diagram.elements.length).toBe(2);
+    expect(r.diagram.elements[0]!.scale).toBe(0.5);
+    // 相対位置も半分になる
+    const dx = r.diagram.elements[1]!.x - r.diagram.elements[0]!.x;
+    expect(dx).toBe((d.elements[1]!.x - d.elements[0]!.x) * 0.5);
+  });
+
+  it('端が選択外につながる配線は持っていかない', () => {
+    const d = zDiagram();
+    const clip = copyItems(d, new Set([d.elements[0]!.id]))!;
+    expect(clip.elements.length).toBe(1);
+    expect(clip.wires.length).toBe(0);
   });
 });

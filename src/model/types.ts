@@ -273,7 +273,8 @@ export interface LvPanelSpec {
 
 // ---------------------------------------------------------------- 図面
 
-export type DiagramKind = 'hv-sld' | 'lv-sld' | 'lv-face' | 'lv-schedule' | 'nameplate';
+/** free は仕様に紐づかない図面（白紙・生成図面の写し）。作り直しの対象にしない */
+export type DiagramKind = 'hv-sld' | 'lv-sld' | 'lv-face' | 'lv-schedule' | 'nameplate' | 'free';
 
 export interface Element {
   id: Id;

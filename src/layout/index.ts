@@ -53,8 +53,10 @@ export interface RegenerateResult {
  */
 export function regenerateAll(project: Project, existing: Diagram[] = project.diagrams): RegenerateResult {
   const results = mergeDiagrams(existing, buildAll(project)).map(fitResult);
+  // 仕様に紐づかない図面（白紙・生成図面の写し）は触らずそのまま残す
+  const free = existing.filter((d) => d.kind === 'free');
   return {
-    diagrams: results.map((r) => r.diagram),
+    diagrams: [...results.map((r) => r.diagram), ...free],
     warnings: results.flatMap((r) => r.warnings.map((w) => `[${r.diagram.title}] ${w}`)),
   };
 }

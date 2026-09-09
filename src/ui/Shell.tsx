@@ -20,6 +20,7 @@ import { LvPanelForm } from './forms/LvPanelForm';
 import { DiagramList } from './panels/DiagramList';
 import { Canvas } from './canvas/Canvas';
 import { REGEN_CONFIRM, REGEN_TITLE } from './panels/DiagramList';
+import type { Clipboard } from '../state/diagramOps';
 
 type Tab = 'spec' | 'draw' | 'export';
 
@@ -35,6 +36,9 @@ export function Shell({ state }: { state: AppState }) {
   const [tool, setTool] = useState<Tool>('select');
   /** 配置待ちの図記号（パレットで選ぶと入り、図面をクリックで置く） */
   const [pending, setPending] = useState<SymbolKind | null>(null);
+  const [snapStep, setSnapStep] = useState(1);
+  const [showGrid, setShowGrid] = useState(true);
+  const [clipboard, setClipboard] = useState<Clipboard | null>(null);
   const viewCenter = useRef<Point>({ x: 210, y: 148 });
   const onViewChange = useCallback((c: Point) => {
     viewCenter.current = c;
@@ -190,6 +194,12 @@ export function Shell({ state }: { state: AppState }) {
               pending={pending}
               onPendingChange={setPending}
               onViewChange={onViewChange}
+              snapStep={snapStep}
+              onSnapStepChange={setSnapStep}
+              showGrid={showGrid}
+              onShowGridChange={setShowGrid}
+              clipboard={clipboard}
+              onClipboardChange={setClipboard}
             />
           ) : (
             <div className="empty">図面がありません</div>

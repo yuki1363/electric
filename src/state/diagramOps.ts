@@ -4,8 +4,9 @@ import { isPortEnd } from '../model/types';
 import { elementBBox, rerouteWire } from '../layout/builder';
 import type { BBox } from '../geom/bbox';
 import { getSymbol } from '../symbols';
+import { simplifyPolyline } from '../geom/point';
 import { STUB } from '../layout/constants';
-import { seqId } from '../model/ids';
+import { newId, seqId } from '../model/ids';
 
 /** 図面内の純粋な編集操作（すべて新しい Diagram を返す） */
 
@@ -79,6 +80,52 @@ function segmentAt(w: Wire, p: Point): { dir: 'v' | 'h'; at: Point } {
     if (d < best.d) best = { d, dir: vertical ? 'v' : 'h', at };
   }
   return best;
+}
+
+/** 配線の中で p にいちばん近い線分の添字（0 始まり）と向き */
+export function nearestSegment(w: Wire, p: Point): { index: number; dir: 'v' | 'h' } | null {
+  if (w.points.length < 2) return null;
+  let best = { index: 0, dir: 'v' as 'v' | 'h', d: Infinity };
+  for (let i = 1; i < w.points.length; i++) {
+    const a = w.points[i - 1]!;
+    const b = w.points[i]!;
+    const vertical = Math.abs(a.x - b.x) < 1e-9;
+    const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, Math.min(lo, hi)), Math.max(lo, hi));
+    const at = vertical ? { x: a.x, y: clamp(p.y, a.y, b.y) } : { x: clamp(p.x, a.x, b.x), y: a.y };
+    const d = Math.hypot(p.x - at.x, p.y - at.y);
+    if (d < best.d) best = { index: i - 1, dir: vertical ? 'v' : 'h', d };
+  }
+  return { index: best.index, dir: best.dir };
+}
+
+/**
+ * 配線の index 番目の線分を、その線分と直角の向きに delta だけ動かす。
+ * 端の線分はポートに付いているので、先頭（末尾）の点を複製してから動かす。
+ * こうすると端子の位置は変わらず、根元に折れが 1 つ増えるだけになる。
+ */
+export function moveWireSegment(d: Diagram, wireId: string, index: number, delta: number, base?: Point[]): Diagram {
+  const wires = d.wires.map((w) => {
+    if (w.id !== wireId) return w;
+    const src = base ?? w.points;
+    if (index < 0 || index + 1 >= src.length) return w;
+    const pts = src.map((p) => ({ ...p }));
+    const vertical = Math.abs(pts[index]!.x - pts[index + 1]!.x) < 1e-9;
+    let i = index;
+    if (i === 0) {
+      pts.unshift({ ...pts[0]! });
+      i += 1;
+    }
+    if (i + 1 === pts.length - 1) pts.push({ ...pts[pts.length - 1]! });
+    if (vertical) {
+      pts[i]!.x += delta;
+      pts[i + 1]!.x += delta;
+    } else {
+      pts[i]!.y += delta;
+      pts[i + 1]!.y += delta;
+    }
+    return { ...w, manual: true, points: simplifyPolyline(pts) };
+  });
+  return touched({ ...d, wires });
 }
 
 /**
@@ -234,4 +281,101 @@ export function distributeItems(d: Diagram, ids: ReadonlySet<string>, axis: 'x' 
     if (delta !== 0) out = moveItems(out, new Set([e.id]), axis === 'x' ? delta : 0, axis === 'x' ? 0 : delta);
   });
   return out;
+}
+
+// ---------------------------------------------------------------- 複製・コピー＆ペースト
+
+/** 図面をまたいで貼り付けるための切り出し。座標は選択範囲の左上を原点にそろえてある */
+export interface Clipboard {
+  elements: Element[];
+  wires: Wire[];
+  texts: TextItem[];
+  /** 切り出し元の縮尺。貼り付け先と違えば大きさをそろえる */
+  scale: number;
+  /** 切り出し元での左上の位置（複製でそのすぐ隣に置くため） */
+  origin: { x: number; y: number };
+}
+
+/** 選択項目を切り出す。両端とも選択内にある配線だけを持っていく */
+export function copyItems(d: Diagram, ids: ReadonlySet<string>): Clipboard | null {
+  const elements = d.elements.filter((e) => ids.has(e.id));
+  const texts = d.texts.filter((t) => ids.has(t.id));
+  const elIds = new Set(elements.map((e) => e.id));
+  // 端が選択外の機器につながっている配線は持っていかない
+  const inside = (e: Wire['from']) => (isPortEnd(e) ? elIds.has(e.elementId) : true);
+  const wires = d.wires.filter((w) => inside(w.from) && inside(w.to));
+  if (elements.length + texts.length + wires.length === 0) return null;
+
+  const xs = [...elements.map((e) => e.x), ...texts.map((t) => t.x), ...wires.flatMap((w) => w.points.map((p) => p.x))];
+  const ys = [...elements.map((e) => e.y), ...texts.map((t) => t.y), ...wires.flatMap((w) => w.points.map((p) => p.y))];
+  const ox = Math.min(...xs);
+  const oy = Math.min(...ys);
+  const shift = <T extends { x: number; y: number }>(p: T): T => ({ ...p, x: p.x - ox, y: p.y - oy });
+  return {
+    elements: elements.map(shift),
+    texts: texts.map(shift),
+    wires: wires.map((w) => ({
+      ...w,
+      from: isPortEnd(w.from) ? w.from : shift(w.from),
+      to: isPortEnd(w.to) ? w.to : shift(w.to),
+      points: w.points.map(shift),
+    })),
+    scale: d.scale ?? 1,
+    origin: { x: ox, y: oy },
+  };
+}
+
+/** 貼り付け・複製の共通処理。id を振り直し、配線の参照も新しい id に張り替える */
+function insertCopy(
+  d: Diagram,
+  clip: Clipboard,
+  at: { x: number; y: number },
+  k: number,
+): { diagram: Diagram; ids: string[] } {
+  const map = new Map<string, string>();
+  const fresh = (id: string) => {
+    const next = newId(id.split('_')[0] || 'e');
+    map.set(id, next);
+    return next;
+  };
+  const place = <T extends { x: number; y: number }>(p: T): T => ({ ...p, x: at.x + p.x * k, y: at.y + p.y * k });
+
+  const elements = clip.elements.map((e) =>
+    manual({ ...place(e), id: fresh(e.id), scale: (e.scale ?? 1) * k }),
+  );
+  const texts = clip.texts.map((t) => manual({ ...place(t), id: fresh(t.id), h: t.h * k }));
+  const end = (e: Wire['from']): Wire['from'] =>
+    isPortEnd(e) ? { ...e, elementId: map.get(e.elementId) ?? e.elementId } : place(e);
+  const wires = clip.wires.map((w) =>
+    manual({ ...w, id: fresh(w.id), from: end(w.from), to: end(w.to), points: w.points.map(place) }),
+  );
+
+  const nextElements = [...d.elements, ...elements];
+  return {
+    diagram: touched({
+      ...d,
+      elements: nextElements,
+      texts: [...d.texts, ...texts],
+      wires: [...d.wires, ...wires.map((w) => rerouteWire(w, nextElements))],
+    }),
+    ids: [...elements.map((e) => e.id), ...wires.map((w) => w.id), ...texts.map((t) => t.id)],
+  };
+}
+
+/** クリップボードの中身を貼り付ける（at は貼り付け範囲の左上） */
+export function pasteItems(d: Diagram, clip: Clipboard, at: { x: number; y: number }): { diagram: Diagram; ids: string[] } {
+  return insertCopy(d, clip, at, (d.scale ?? 1) / (clip.scale || 1));
+}
+
+/** 選択項目をその場で複製して少しずらす */
+export function duplicateItems(
+  d: Diagram,
+  ids: ReadonlySet<string>,
+  dx: number,
+  dy: number,
+): { diagram: Diagram; ids: string[] } {
+  const clip = copyItems(d, ids);
+  if (!clip) return { diagram: d, ids: [] };
+  // copyItems が左上を原点にそろえているので、元の左上 + ずらし量が貼り付け位置
+  return insertCopy(d, clip, { x: clip.origin.x + dx, y: clip.origin.y + dy }, 1);
 }

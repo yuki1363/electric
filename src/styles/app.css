@@ -27,6 +27,8 @@ body { background: #eceff1; }
   position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; align-items: center;
   background: rgba(255,255,255,.9); padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border);
 }
+.canvas-toolbar label { display: flex; gap: 3px; align-items: center; font-size: 11px; color: #555; }
+.canvas-toolbar select { font: inherit; font-size: 11px; padding: 1px 2px; }
 
 /* ギャラリー */
 .gallery { padding: 16px; }
@@ -87,12 +89,15 @@ input[type=text], input[type=number], input[type=date], select { font: inherit; 
 .badge { font-size: 10px; padding: 0 4px; border-radius: 3px; }
 .badge.stale { background: #fff3cd; color: #8a6d00; }
 .badge.edited { background: #e3f2fd; color: #0d47a1; }
+.badge.free { background: #e8f5e9; color: #1b5e20; }
 .empty { flex: 1; display: flex; align-items: center; justify-content: center; color: #777; }
 .app-main.export { padding: 16px; flex-direction: column; background: #fff; }
 
 /* 編集キャンバス */
 .canvas-host.tool-wire, .canvas-host.tool-text { cursor: crosshair; }
 .hit-el:hover, .hit-text:hover, .hit-label:hover { stroke: var(--accent); stroke-width: 0.3; }
+/* 配線は掴んで曲がりを動かせる */
+.canvas-host.tool-select .hit-wire { cursor: move; }
 .hit-wire:hover { stroke: var(--accent); stroke-opacity: .35; }
 .port { cursor: pointer; }
 .tool-hint { color: var(--accent); margin-right: 8px; }

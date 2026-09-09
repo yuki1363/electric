@@ -12,6 +12,7 @@ import { snapValue } from '../../geom/point';
 import { newId } from '../../model/ids';
 import { useDispatch } from '../../state/context';
 import { elementBBox, itemsInRect, labelLineBBox, nearestWireAt, textBBox } from './hit';
+import { copyItems, nearestSegment, type Clipboard } from '../../state/diagramOps';
 import { getSymbol } from '../../symbols';
 import type { Tool } from './types';
 
@@ -27,6 +28,12 @@ export interface CanvasProps {
   onPendingChange?: (k: SymbolKind | null) => void;
   onViewChange?: (center: Point) => void;
   showGrid?: boolean;
+  /** 移動の刻み mm。0 でスナップなし（Alt を押している間も 0 になる） */
+  snapStep?: number;
+  onSnapStepChange?: (v: number) => void;
+  onShowGridChange?: (v: boolean) => void;
+  clipboard?: Clipboard | null;
+  onClipboardChange?: (c: Clipboard | null) => void;
   readOnly?: boolean;
 }
 
@@ -39,6 +46,7 @@ type DragState =
   | { kind: 'pan'; sx: number; sy: number; pan: { x: number; y: number } }
   | { kind: 'move'; ids: string[]; start: Point; moved: boolean }
   | { kind: 'label'; id: string; start: Point; base: Point; moved: boolean }
+  | { kind: 'wireSeg'; id: string; index: number; dir: 'v' | 'h'; start: Point; base: Point[]; moved: boolean }
   | { kind: 'marquee'; start: Point; cur: Point; additive: boolean };
 
 interface PortPick {
@@ -49,6 +57,9 @@ interface PortPick {
 
 /** ドラッグ中に相手の中心線へ吸い付く距離 mm */
 const SNAP_TOL = 3;
+
+/** 刻みに丸める。0 以下ならそのまま（Alt 押下中・スナップ無しのとき） */
+const snapTo = (v: number, step: number): number => (step > 0 ? snapValue(v, step) : v);
 
 /** 図面編集キャンバス */
 export function Canvas({
@@ -62,6 +73,11 @@ export function Canvas({
   onPendingChange,
   onViewChange,
   showGrid = true,
+  snapStep = 1,
+  onSnapStepChange,
+  onShowGridChange,
+  clipboard = null,
+  onClipboardChange,
   readOnly = false,
 }: CanvasProps) {
   const dispatch = useDispatch();
@@ -74,6 +90,8 @@ export function Canvas({
   const [spaceDown, setSpaceDown] = useState(false);
   const [wireFrom, setWireFrom] = useState<PortPick | null>(null);
   const [hoverPos, setHoverPos] = useState<Point | null>(null);
+  /** 直近のカーソル位置（貼り付け位置に使う） */
+  const hoverRef = useRef<Point | null>(null);
   const selSet = new Set(selection);
 
   const setDragBoth = (d: DragState | null) => {
@@ -130,11 +148,41 @@ export function Canvas({
         onSelectionChange([]);
         return;
       }
+      if (e.ctrlKey || e.metaKey) {
+        const key = e.key.toLowerCase();
+        if (key === 'c' && selection.length > 0) {
+          e.preventDefault();
+          onClipboardChange?.(copyItems(diagram, new Set(selection)));
+          return;
+        }
+        if (key === 'x' && selection.length > 0) {
+          e.preventDefault();
+          onClipboardChange?.(copyItems(diagram, new Set(selection)));
+          dispatch({ type: 'DELETE_ITEMS', diagramId: diagram.id, ids: selection });
+          onSelectionChange([]);
+          return;
+        }
+        if (key === 'v' && clipboard) {
+          e.preventDefault();
+          const at = hoverRef.current ?? { x: 30, y: 30 };
+          dispatch({ type: 'PASTE_ITEMS', diagramId: diagram.id, clip: clipboard, at });
+          return;
+        }
+        if (key === 'd' && selection.length > 0) {
+          e.preventDefault();
+          const d = Math.max(snapStep, 2) * 3;
+          dispatch({ type: 'DUPLICATE_ITEMS', diagramId: diagram.id, ids: selection, dx: d, dy: d });
+          return;
+        }
+        return;
+      }
+      // 矢印キーの微動。Shift で 5 倍
+      const step = (snapStep > 0 ? snapStep : 1) * (e.shiftKey ? 5 : 1);
       const nudge: Record<string, [number, number]> = {
-        ArrowLeft: [-GRID, 0],
-        ArrowRight: [GRID, 0],
-        ArrowUp: [0, -GRID],
-        ArrowDown: [0, GRID],
+        ArrowLeft: [-step, 0],
+        ArrowRight: [step, 0],
+        ArrowUp: [0, -step],
+        ArrowDown: [0, step],
       };
       const n = nudge[e.key];
       if (n && selection.length > 0) {
@@ -152,7 +200,7 @@ export function Canvas({
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
     };
-  }, [selection, diagram.id, dispatch, onSelectionChange, tool, onToolChange, readOnly]);
+  }, [selection, diagram, dispatch, onSelectionChange, tool, onToolChange, readOnly, snapStep, clipboard, onClipboardChange]);
 
   const toWorld = (e: { clientX: number; clientY: number }): Point => {
     const host = hostRef.current!;
@@ -231,7 +279,8 @@ export function Canvas({
     if (tool === 'place') {
       if (!pending) return;
       const def = getSymbol(pending);
-      const at = { x: snapValue(w.x, GRID), y: snapValue(w.y, GRID) };
+      const step = e.altKey ? 0 : snapStep;
+      const at = { x: snapTo(w.x, step), y: snapTo(w.y, step) };
       const el = { id: newId('e'), kind: pending, x: at.x, y: at.y, rot: 0 as const, labels: [...(def.defaultLabels ?? [])] };
       // 配線の上に置いたら、その線を 2 本に分けて途中に入れる
       const wireId = nearestWireAt(diagram, w, 2.5);
@@ -251,7 +300,7 @@ export function Canvas({
       dispatch({
         type: 'ADD_TEXT',
         diagramId: diagram.id,
-        text: { id, x: snapValue(w.x, GRID), y: snapValue(w.y, GRID), text: 'テキスト', h: 3.5, anchor: 'start' },
+        text: { id, x: snapTo(w.x, e.altKey ? 0 : snapStep), y: snapTo(w.y, e.altKey ? 0 : snapStep), text: 'テキスト', h: 3.5, anchor: 'start' },
       });
       onSelectionChange([id]);
       onToolChange('select');
@@ -266,6 +315,17 @@ export function Canvas({
       setDragBoth({ kind: 'label', id: el.id, start: w, base: el.labelOffset ?? { x: 0, y: 0 }, moved: false });
       host.setPointerCapture(e.pointerId);
       return;
+    }
+    // 配線を掴んだら、その線分を直角方向に動かす（曲がりの位置を手で調整する）
+    const wire = hit && hit.kind === 'item' ? diagram.wires.find((x) => x.id === hit.id) : undefined;
+    if (wire && !e.shiftKey && selection.length <= 1) {
+      const seg = nearestSegment(wire, w);
+      if (seg) {
+        onSelectionChange([wire.id]);
+        setDragBoth({ kind: 'wireSeg', id: wire.id, index: seg.index, dir: seg.dir, start: w, base: wire.points, moved: false });
+        host.setPointerCapture(e.pointerId);
+        return;
+      }
     }
     if (hit && (hit.kind === 'item' || hit.kind === 'port')) {
       let ids: string[];
@@ -320,15 +380,33 @@ export function Canvas({
 
   const onPointerMove = (e: React.PointerEvent) => {
     const d = dragRef.current;
-    if (tool === 'wire') setHoverPos(toWorld(e));
+    const step = e.altKey ? 0 : snapStep;
+    hoverRef.current = toWorld(e);
+    if (tool === 'wire') setHoverPos(hoverRef.current);
     if (!d) return;
     if (d.kind === 'pan') {
       setView((v) => ({ ...v, pan: { x: d.pan.x - (e.clientX - d.sx) / v.zoom, y: d.pan.y - (e.clientY - d.sy) / v.zoom } }));
       return;
     }
     const w = toWorld(e);
+    if (d.kind === 'wireSeg') {
+      const raw = d.dir === 'v' ? w.x - d.start.x : w.y - d.start.y;
+      const delta = snapTo(raw, step);
+      if (delta !== 0 || d.moved) {
+        dispatch({
+          type: 'WIRE_SEGMENT_PREVIEW',
+          diagramId: diagram.id,
+          wireId: d.id,
+          index: d.index,
+          delta,
+          base: d.base,
+        });
+        if (!d.moved) setDragBoth({ ...d, moved: true });
+      }
+      return;
+    }
     if (d.kind === 'move') {
-      const { dx, dy } = snapToPeers(d.ids, snapValue(w.x - d.start.x, GRID), snapValue(w.y - d.start.y, GRID));
+      const { dx, dy } = snapToPeers(d.ids, snapTo(w.x - d.start.x, step), snapTo(w.y - d.start.y, step));
       if (dx !== 0 || dy !== 0 || d.moved) {
         dispatch({ type: 'MOVE_PREVIEW', diagramId: diagram.id, ids: d.ids, dx, dy });
         if (!d.moved) setDragBoth({ ...d, moved: true });
@@ -350,7 +428,7 @@ export function Canvas({
   const onPointerUp = () => {
     const d = dragRef.current;
     if (!d) return;
-    if (d.kind === 'move' || d.kind === 'label') {
+    if (d.kind === 'move' || d.kind === 'label' || d.kind === 'wireSeg') {
       if (d.moved) dispatch({ type: 'COMMIT_PREVIEW' });
     } else if (d.kind === 'marquee') {
       const r = {
@@ -367,6 +445,9 @@ export function Canvas({
   };
 
   const inner = diagramSvgInner(flattenDiagram(diagram, title ? { frame: title } : {}));
+  /** 細線の格子は刻みに合わせる。画面上で細かすぎるときは出さない */
+  const minorGrid = snapStep > 0 ? snapStep : GRID;
+  const showMinorGrid = minorGrid < GRID * 2 && minorGrid * view.zoom >= 3;
   const vb = `${view.pan.x} ${view.pan.y} ${size.w / view.zoom} ${size.h / view.zoom}`;
   const px = (n: number) => n / view.zoom; // 画面ピクセル → 用紙 mm
 
@@ -387,12 +468,16 @@ export function Canvas({
     >
       <svg width={size.w} height={size.h} viewBox={vb} className="canvas-svg">
         <defs>
-          <pattern id="grid" width={GRID} height={GRID} patternUnits="userSpaceOnUse">
-            <path d={`M ${GRID} 0 L 0 0 0 ${GRID}`} fill="none" stroke={COLOR_GRID} strokeWidth="0.1" />
+          <pattern id="grid" width={minorGrid} height={minorGrid} patternUnits="userSpaceOnUse">
+            <path d={`M ${minorGrid} 0 L 0 0 0 ${minorGrid}`} fill="none" stroke={COLOR_GRID} strokeWidth="0.1" />
+          </pattern>
+          <pattern id="grid-major" width={GRID * 2} height={GRID * 2} patternUnits="userSpaceOnUse">
+            <path d={`M ${GRID * 2} 0 L 0 0 0 ${GRID * 2}`} fill="none" stroke={COLOR_GRID} strokeWidth="0.25" />
           </pattern>
         </defs>
         <rect x={0} y={0} width={paper.w} height={paper.h} fill="#fff" stroke="#999" strokeWidth={0.3} />
-        {showGrid && <rect x={0} y={0} width={paper.w} height={paper.h} fill="url(#grid)" />}
+        {showGrid && showMinorGrid && <rect x={0} y={0} width={paper.w} height={paper.h} fill="url(#grid)" />}
+        {showGrid && <rect x={0} y={0} width={paper.w} height={paper.h} fill="url(#grid-major)" />}
         <g color="#000" dangerouslySetInnerHTML={{ __html: inner }} />
 
         {/* ヒット領域 */}
@@ -568,6 +653,20 @@ export function Canvas({
             {tool === 'wire' ? (wireFrom ? '接続先のポートをクリック' : '始点のポートをクリック') : 'クリック位置にテキストを追加'}（Esc で解除）
           </span>
         )}
+        <label title="移動の刻み。Alt を押している間はスナップしません">
+          スナップ
+          <select value={snapStep} onChange={(e) => onSnapStepChange?.(Number(e.target.value))}>
+            {[0.5, 1, 2.5, 5].map((v) => (
+              <option key={v} value={v}>
+                {v}mm
+              </option>
+            ))}
+            <option value={0}>なし</option>
+          </select>
+        </label>
+        <label title="格子の表示">
+          <input type="checkbox" checked={showGrid} onChange={(e) => onShowGridChange?.(e.target.checked)} /> 格子
+        </label>
         <button onClick={fit}>全体表示</button>
         <span>{Math.round(view.zoom * 100) / 100}x</span>
       </div>

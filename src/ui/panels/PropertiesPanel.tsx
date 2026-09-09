@@ -27,10 +27,22 @@ export function PropertiesPanel({
     return (
       <div className="props">
         <h3>プロパティ</h3>
-        <p className="muted">項目をクリックして選択。ドラッグで移動（5mm 格子）、Shift+クリックで複数選択、Delete で削除。</p>
-        <p className="muted">ホイール: 拡縮 / Space+ドラッグ・中ボタン: パン / 矢印キー: 5mm 移動</p>
         <p className="muted">
-          {diagram.edited ? '手動編集あり（再生成すると失われます）' : '自動生成のまま'}
+          項目をクリックして選択。ドラッグで移動、Shift+クリックで複数選択、Delete で削除。
+          <b>配線はドラッグすると曲がりの位置を動かせます。</b>
+        </p>
+        <p className="muted">
+          刻みは右下の「スナップ」で変えられます（Alt を押している間はスナップしません）。
+          矢印キーで 1 刻み、Shift+矢印で 5 刻み。
+        </p>
+        <p className="muted">Ctrl+D 複製 / Ctrl+C・V コピー＆貼り付け（図面をまたげます） / Ctrl+X 切り取り</p>
+        <p className="muted">ホイール: 拡縮 / Space+ドラッグ・中ボタン: パン</p>
+        <p className="muted">
+          {diagram.kind === 'free'
+            ? '手描きの図面（仕様から作り直されません）'
+            : diagram.edited
+              ? '手作業あり（作り直しても残ります）'
+              : '自動生成のまま'}
           {diagram.stale ? ' / 仕様変更後に未再生成' : ''}
         </p>
       </div>

@@ -3,6 +3,7 @@ import { regenerateAll } from '../layout';
 import type { Action } from './actions';
 import * as ops from './diagramOps';
 import { createHistory, push, redo, replace, undo, type History } from './history';
+import { newId } from '../model/ids';
 
 export interface AppState {
   history: History<Project>;
@@ -23,6 +24,26 @@ function markStale(p: Project): Project {
 function withDiagram(p: Project, id: string, f: (d: Diagram) => Diagram): Project {
   return { ...p, diagrams: p.diagrams.map((d) => (d.id === id ? f(d) : d)) };
 }
+
+/** 仕様に紐づかない白紙の図面 */
+function blankDiagram(p: Project, title: string): Diagram {
+  return {
+    id: newId('dg'),
+    kind: 'free',
+    title,
+    sheet: p.meta.sheet,
+    elements: [],
+    wires: [],
+    texts: [],
+    shapes: [],
+    edited: true,
+  };
+}
+
+const insertAfter = (list: Diagram[], d: Diagram, afterId?: string): Diagram[] => {
+  const i = afterId ? list.findIndex((x) => x.id === afterId) : -1;
+  return i < 0 ? [...list, d] : [...list.slice(0, i + 1), d, ...list.slice(i + 1)];
+};
 
 /** 仕様から図面を作り直す。手で足した機器・配線・文字は regenerateAll が引き継ぐ */
 function regenerateProject(p: Project): { project: Project; warnings: string[] } {
@@ -79,6 +100,13 @@ export function reducer(state: AppState, action: Action): AppState {
       const next = withDiagram(base, action.diagramId, (d) => ops.moveLabel(d, action.id, action.offset));
       return { ...state, history: replace(h, next), previewBase: base };
     }
+    case 'WIRE_SEGMENT_PREVIEW': {
+      const base = state.previewBase ?? p;
+      const next = withDiagram(base, action.diagramId, (d) =>
+        ops.moveWireSegment(d, action.wireId, action.index, action.delta, action.base),
+      );
+      return { ...state, history: replace(h, next), previewBase: base };
+    }
     case 'COMMIT_PREVIEW': {
       if (!state.previewBase) return state;
       if (state.previewBase === p) return { ...state, previewBase: null };
@@ -108,6 +136,40 @@ export function reducer(state: AppState, action: Action): AppState {
       return commit(withDiagram(p, action.diagramId, (d) => ops.alignItems(d, new Set(action.ids), action.mode)));
     case 'DISTRIBUTE_ITEMS':
       return commit(withDiagram(p, action.diagramId, (d) => ops.distributeItems(d, new Set(action.ids), action.axis)));
+    case 'ADD_DIAGRAM': {
+      const d = blankDiagram(p, action.title);
+      return commit({ ...p, diagrams: insertAfter(p.diagrams, d, action.afterId) });
+    }
+    case 'DUPLICATE_DIAGRAM': {
+      const src = p.diagrams.find((d) => d.id === action.diagramId);
+      if (!src) return state;
+      // 写しは仕様から切り離す。以降は手で描く図面になる
+      const copy: Diagram = {
+        ...src,
+        id: newId('dg'),
+        kind: 'free',
+        title: `${src.title}（写し）`,
+        sourceId: undefined,
+        page: undefined,
+        pageCount: undefined,
+        stale: undefined,
+        edited: true,
+      };
+      return commit({ ...p, diagrams: insertAfter(p.diagrams, copy, src.id) });
+    }
+    case 'RENAME_DIAGRAM':
+      return commit({
+        ...p,
+        diagrams: p.diagrams.map((d) => (d.id === action.diagramId ? { ...d, title: action.title } : d)),
+      });
+    case 'REMOVE_DIAGRAM':
+      return commit({ ...p, diagrams: p.diagrams.filter((d) => d.id !== action.diagramId) });
+    case 'DUPLICATE_ITEMS':
+      return commit(
+        withDiagram(p, action.diagramId, (d) => ops.duplicateItems(d, new Set(action.ids), action.dx, action.dy).diagram),
+      );
+    case 'PASTE_ITEMS':
+      return commit(withDiagram(p, action.diagramId, (d) => ops.pasteItems(d, action.clip, action.at).diagram));
     case 'UNDO':
       return { ...state, history: undo(h), previewBase: null };
     case 'REDO':
