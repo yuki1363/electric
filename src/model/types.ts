@@ -266,7 +266,15 @@ export interface HvSpec {
   enabled: boolean;
   /** 架空 / 地中 */
   incoming: 'overhead' | 'underground';
-  pas: { kind: 'PAS' | 'UGS' | 'none'; sog: boolean; ratedA: number };
+  pas: {
+    kind: 'PAS' | 'UGS' | 'none';
+    sog: boolean;
+    ratedA: number;
+    /** 零相変流器。地絡継電器を選ぶと自動でも足す */
+    zct?: boolean;
+    /** 区分開閉器の地絡保護に使う継電器（SOG の DGR など） */
+    relays?: RelayKind[];
+  };
   cable: { type: string; sq: number; lengthM?: number };
   /** 取引用計器（VCT + Wh） */
   vct: boolean;

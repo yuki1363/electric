@@ -4,7 +4,7 @@ import { getSymbol, isSymbolKind } from '../symbols';
 import { safeFileName } from '../export/download';
 import { defaultHv, defaultMeta, defaultPanel } from './defaults';
 import { migrateDevices } from './switchgear';
-import { migrateRelays } from './relay';
+import { migrateRelays, orderRelays, type RelayKind } from './relay';
 
 export const FILE_EXT = '.elec.json';
 
@@ -81,6 +81,17 @@ function migrateHv(rawHv: Record<string, unknown>): Record<string, unknown> {
     transformers: list(rawHv.transformers, 'switch'),
     capacitors: list(rawHv.capacitors, 'switch'),
   };
+
+  // 区分開閉器の地絡保護。旧データは DGR の銘板があれば DGR を付けていたとみなす
+  const pas = rawHv.pas;
+  if (isObj(pas)) {
+    const nps = rawHv.nameplates;
+    const legacyDgr = isObj(nps) && isObj(nps.dgr);
+    out.pas = {
+      ...pas,
+      relays: Array.isArray(pas.relays) ? orderRelays(pas.relays as RelayKind[]) : legacyDgr ? ['DGR'] : [],
+    };
+  }
 
   const mb = rawHv.mainBreaker;
   if (isObj(mb) && Array.isArray(mb.devices)) {

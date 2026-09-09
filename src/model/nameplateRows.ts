@@ -69,7 +69,14 @@ function hvRows(hv: Project['hv'], prefix: string): NameplateRow[] {
         row(hv.pas.kind, np('pas'), `7.2kV ${hv.pas.ratedA}A${hv.pas.sog ? ' SOG付' : ''}`, g(`引込（${incoming}）`)),
       );
     }
-    if (np('dgr')) out.push(row('DGR', np('dgr'), '', g('引込')));
+    // 区分開閉器の地絡保護（ZCT と継電器）
+    const pasRelays = orderRelays(hv.pas.relays);
+    if (hv.pas.kind !== 'none' && (hv.pas.zct || pasRelays.length > 0)) {
+      out.push(row('ZCT', np('zct'), '', g('引込')));
+    }
+    for (const r of pasRelays) out.push(row(RELAY_SHORT[r], np(relayKey(r) as HvSlot), '', g('引込')));
+    // 旧データ（継電器を選ばずに DGR の銘板だけ入っている）も一覧から落とさない
+    if (!pasRelays.includes('DGR') && np('dgr')) out.push(row('DGR', np('dgr'), '', g('引込')));
     out.push(
       row(
         '高圧ケーブル',

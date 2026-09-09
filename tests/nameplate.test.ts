@@ -80,9 +80,10 @@ describe('機器銘板表', () => {
 
   it('銘板表の図面に数量列が出る', () => {
     const p = withHandDevice(seeded(), { nameplate: { maker: 'C社', qty: 3 } });
-    const d = regenerateAll(p).diagrams.find((x) => x.kind === 'nameplate')!;
-    expect(d.texts.some((t) => t.text === '数量')).toBe(true);
-    expect(d.texts.some((t) => t.text === '3')).toBe(true);
+    // 行数によっては表が複数ページに分かれるので、銘板表の全ページから探す
+    const ds = regenerateAll(p).diagrams.filter((x) => x.kind === 'nameplate');
+    expect(ds.some((d) => d.texts.some((t) => t.text === '数量'))).toBe(true);
+    expect(ds.some((d) => d.texts.some((t) => t.text === '3'))).toBe(true);
   });
 });
 

@@ -11,7 +11,8 @@ export function defaultHv(): HvSpec {
   return {
     enabled: true,
     incoming: 'overhead',
-    pas: { kind: 'PAS', sog: true, ratedA: 300 },
+    // SOG 付は零相変流器と地絡方向継電器で地絡を検出する
+    pas: { kind: 'PAS', sog: true, ratedA: 300, zct: true, relays: ['DGR'] },
     cable: { type: 'CVT', sq: 38, lengthM: 30 },
     vct: true,
     ds: true,

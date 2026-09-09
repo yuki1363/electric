@@ -4,7 +4,7 @@ import { sampleProject } from '../src/model/defaults';
 import { nameplateRows } from '../src/model/nameplateRows';
 import { sheetGeom } from '../src/layout/constants';
 import { isOrthogonal } from '../src/layout/router';
-import { isPortEnd, type SwitchDevice } from '../src/model/types';
+import { isPortEnd, type Diagram, type SwitchDevice } from '../src/model/types';
 import { getSymbol } from '../src/symbols';
 import { bboxOfPrims, bboxOfRect, overlaps } from '../src/geom/bbox';
 import { elementPort } from '../src/layout/builder';
@@ -640,5 +640,83 @@ describe('その他の電源（自由入力）', () => {
     hv.transformers[0]!.externalSource = { name: 'DTMC' };
     const rows = nameplateRows({ ...p, hv });
     expect(rows.some((r) => r.note === 'Tr-1（DTMC）')).toBe(true);
+  });
+});
+
+describe('区分開閉器の地絡保護', () => {
+  const p = sampleProject();
+  /** a と b が配線でつながっているか */
+  const linked = (d: Diagram, a: { id: string }, b: { id: string }) =>
+    d.wires.some(
+      (w) =>
+        (isPortEnd(w.from) && w.from.elementId === a.id && isPortEnd(w.to) && w.to.elementId === b.id) ||
+        (isPortEnd(w.from) && w.from.elementId === b.id && isPortEnd(w.to) && w.to.elementId === a.id),
+    );
+
+  it('既定（SOG 付）では ZCT 二次から DGR へつながる', () => {
+    const r = generateHvSld(p.hv, p.meta, p.panels)[0]!;
+    const d = r.diagram;
+    const pas = d.elements.find((e) => e.kind === 'PAS')!;
+    const zct = d.elements.find((e) => e.kind === 'ZCT')!;
+    const dgr = d.elements.find((e) => e.kind === 'DGR')!;
+    // 区分開閉器の下・ケーブルヘッドの上に入る
+    const head = d.elements.find((e) => e.kind === 'CABLE_HEAD')!;
+    expect(zct.y).toBeGreaterThan(pas.y);
+    expect(zct.y).toBeLessThan(head.y);
+    expect(linked(d, pas, zct)).toBe(true);
+    // 継電器は ZCT の右、同じ段に制御線でつながる
+    expect(dgr.y).toBe(zct.y);
+    expect(dgr.x).toBeGreaterThan(zct.x);
+    const w = d.wires.find(
+      (x) => isPortEnd(x.from) && x.from.elementId === zct.id && isPortEnd(x.to) && x.to.elementId === dgr.id,
+    )!;
+    expect(w.style).toBe('control');
+    expect(d.texts.some((t) => t.text === 'ZCT二次')).toBe(true);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it('継電器を複数選ぶと ZCT 二次に直列に並ぶ', () => {
+    const hv = { ...p.hv, pas: { ...p.hv.pas, zct: true, relays: ['DGR', 'OCGR'] as const } };
+    const d = generateHvSld({ ...hv, pas: { ...hv.pas, relays: [...hv.pas.relays] } }, p.meta, p.panels)[0]!.diagram;
+    const zct = d.elements.find((e) => e.kind === 'ZCT')!;
+    const dgr = d.elements.find((e) => e.kind === 'DGR')!;
+    const ocgr = d.elements.find((e) => e.kind === 'OCGR')!;
+    expect(linked(d, zct, dgr)).toBe(true);
+    expect(linked(d, dgr, ocgr)).toBe(true);
+    expect(ocgr.x).toBeGreaterThan(dgr.x);
+  });
+
+  it('ZCT を外していても継電器を選べば足して知らせる', () => {
+    const hv = { ...p.hv, pas: { ...p.hv.pas, zct: false, relays: ['DGR' as const] } };
+    const r = generateHvSld(hv, p.meta, p.panels)[0]!;
+    expect(r.diagram.elements.some((e) => e.kind === 'ZCT')).toBe(true);
+    expect(r.warnings.some((w) => w.includes('ZCT を追加'))).toBe(true);
+  });
+
+  it('零相電圧を使う継電器は取り出し元を知らせる', () => {
+    const hv = { ...p.hv, pas: { ...p.hv.pas, zct: true, relays: ['OVGR' as const] } };
+    const r = generateHvSld(hv, p.meta, p.panels)[0]!;
+    expect(r.diagram.elements.some((e) => e.kind === 'OVGR')).toBe(true);
+    expect(r.warnings.some((w) => w.includes('零相電圧'))).toBe(true);
+  });
+
+  it('どちらも外せば描かない', () => {
+    const hv = { ...p.hv, pas: { ...p.hv.pas, zct: false, relays: [] } };
+    const r = generateHvSld(hv, p.meta, p.panels)[0]!;
+    expect(r.diagram.elements.some((e) => e.kind === 'ZCT')).toBe(false);
+    expect(r.diagram.elements.some((e) => e.kind === 'DGR')).toBe(false);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it('銘板表に ZCT と継電器の行が出る', () => {
+    const rows = nameplateRows(p);
+    const zct = rows.find((x) => x.deviceName === 'ZCT')!;
+    const dgr = rows.find((x) => x.deviceName === 'DGR')!;
+    expect(zct.note).toBe('引込');
+    expect(dgr.note).toBe('引込');
+    // 外せば行も消える
+    const off = nameplateRows({ ...p, hv: { ...p.hv, pas: { ...p.hv.pas, zct: false, relays: [] } } });
+    expect(off.some((x) => x.deviceName === 'ZCT')).toBe(false);
+    expect(off.some((x) => x.deviceName === 'DGR')).toBe(false);
   });
 });

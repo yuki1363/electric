@@ -200,14 +200,20 @@ export function HvForm({
   /** 受電盤で有効になっているスロット */
   const activeSlots = (): HvSlot[] => {
     const out: HvSlot[] = [];
-    if (hv.pas.kind !== 'none') out.push('pas');
-    out.push('dgr', 'cable');
+    const pasRelays = orderRelays(hv.pas.relays);
+    if (hv.pas.kind !== 'none') {
+      out.push('pas');
+      if (hv.pas.zct || pasRelays.length > 0) out.push('zct');
+      for (const r of pasRelays) out.push(relayKey(r) as HvSlot);
+    }
+    if (!pasRelays.includes('DGR')) out.push('dgr');
+    out.push('cable');
     if (hv.vct) out.push('vct', 'whTr');
     if (hv.ds) out.push('ds');
     if (hv.metering.vt) out.push('vtf', 'vt');
     if (hv.la) out.push('la');
     if (hv.mainBreaker.ct) out.push('ct');
-    if (hv.mainBreaker.ocr) out.push('ocr');
+    for (const r of relaysOf(hv.mainBreaker)) out.push(relayKey(r) as HvSlot);
     if (hv.metering.v) {
       if (hv.metering.vs ?? true) out.push('vs');
       out.push('meterV');
@@ -220,7 +226,8 @@ export function HvForm({
     if (hv.metering.pf) out.push('meterPf');
     if (hv.metering.wh) out.push('meterWh');
     for (const dev of orderDevices(hv.mainBreaker.devices)) out.push(deviceKey(dev) as HvSlot);
-    return out;
+    // 区分開閉器と主遮断装置で同じ継電器を選ぶと重複するので、入力欄は 1 つにまとめる
+    return [...new Set(out)];
   };
 
   const mb = hv.mainBreaker;
@@ -272,6 +279,17 @@ export function HvForm({
               />{' '}
               定格 <NumberField value={hv.pas.ratedA} onCommit={(v) => set({ pas: { ...hv.pas, ratedA: v ?? 300 } })} /> A{' '}
               <CheckField checked={hv.pas.sog} onChange={(v) => set({ pas: { ...hv.pas, sog: v } })} label="SOG 付" />
+            </Row>
+            <Row label="地絡保護">
+              <CheckField
+                checked={hv.pas.zct ?? false}
+                onChange={(v) => set({ pas: { ...hv.pas, zct: v } })}
+                label="ZCT（零相変流器）"
+              />{' '}
+              <RelayPicker
+                value={orderRelays(hv.pas.relays)}
+                onChange={(v) => set({ pas: { ...hv.pas, relays: v } })}
+              />
             </Row>
             <Row label="引込ケーブル">
               <TextField value={hv.cable.type} onCommit={(v) => set({ cable: { ...hv.cable, type: v } })} width={70} />{' '}

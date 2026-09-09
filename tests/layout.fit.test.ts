@@ -27,6 +27,8 @@ const tr = (i: number, feederId?: string): TransformerSpec => ({
 function hvFlat(n: number): HvSpec {
   return {
     ...base.hv,
+    // 区分開閉器の地絡保護（ZCT + 継電器）も外して、受電部の縦を最小にする
+    pas: { ...base.hv.pas, zct: false, relays: [] },
     metering: { vt: false, a: false, v: false, w: false, wh: false, pf: false },
     feeders: [],
     transformers: Array.from({ length: n }, (_, i) => tr(i + 1)),

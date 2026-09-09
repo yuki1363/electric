@@ -286,6 +286,31 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     return el;
   };
 
+  /**
+   * 機器を横一列に並べ、制御線で直列につなぐ（計測回路の二次側）。
+   * 起点の機器の E ポートから右へ伸ばす
+   */
+  const chainRight = (
+    from: { el: Element; port: string },
+    rowY: number,
+    items: { kind: SK; labels: string[] }[],
+  ): Element[] => {
+    /** 横一列に並べるときの隣どうしの隙間 */
+    const GAP = 10;
+    let x = TX + 30;
+    let prevHalf = 0;
+    let last = from;
+    return items.map((it) => {
+      const half = getSymbol(it.kind).bbox.w / 2;
+      x = prevHalf === 0 ? x : x + prevHalf + GAP + half;
+      prevHalf = half;
+      const el = b.el(it.kind, x, rowY, { labels: it.labels });
+      b.wire(last.el, last.port, el, 'W', 'control');
+      last = { el, port: 'E' };
+      return el;
+    });
+  };
+
   if (first) {
     // 区分開閉器
     if (hv.pas.kind !== 'none') {
@@ -293,6 +318,33 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
         ratedA: hv.pas.ratedA,
         sog: hv.pas.sog,
       });
+
+      // 区分開閉器の地絡保護（SOG は ZCT で零相電流を検出して継電器へ入れる）
+      const pasRelays = orderRelays(hv.pas.relays);
+      if (pasRelays.length > 0 || hv.pas.zct) {
+        if (pasRelays.length > 0 && !hv.pas.zct) {
+          b.warn('地絡継電器は ZCT 二次から取るため、区分開閉器に ZCT を追加しました');
+        }
+        const zct = place('ZCT', withModel(['ZCT'], hv.nameplates?.zct));
+        if (pasRelays.length > 0) {
+          chainRight(
+            { el: zct, port: 'E' },
+            zct.y,
+            pasRelays.map((r) => ({
+              kind: relaySymbolKind(r),
+              labels: r === 'RELAY' ? ['継電器'] : withModel([], hv.nameplates?.[relayKey(r) as HvSlot]),
+            })),
+          );
+          b.text(TX + 52, zct.y + 7, 'ZCT二次', TEXT.rating, 'end');
+          // 零相電圧を使う継電器は ZVT（EVT）の二次から取る。ZCT 二次に並べて描いている
+          const needsV = pasRelays.filter((r) => RELAY_CIRCUIT[r].v && !RELAY_CIRCUIT[r].z);
+          if (needsV.length > 0) {
+            b.warn(
+              `${needsV.join('・')} は零相電圧（ZVT/EVT）から取ります。区分開閉器の ZCT 二次に並べて描いています`,
+            );
+          }
+        }
+      }
     }
 
     // ケーブルヘッド
