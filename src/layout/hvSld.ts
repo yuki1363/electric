@@ -1,6 +1,7 @@
 import type { Element, HvSlot, HvSpec, LvPanelSpec, ProjectMeta } from '../model/types';
 import { deviceKey, deviceLabel, deviceSymbol, orderDevices, type SwitchDevice } from '../model/switchgear';
 import { trConnectionText, trSymbolKind } from '../model/transformer';
+import { RELAY_CIRCUIT, orderRelays, relayKey, relaySymbolKind, type RelayKind } from '../model/relay';
 import type { SymbolKind as SK } from '../symbols/types';
 import { DiagramBuilder } from './builder';
 import { bboxOfPrims, emptyBBox, inflate, isEmptyBBox, union } from '../geom/bbox';
@@ -300,7 +301,7 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
      * 電流計・電力計・力率計・電力量計の電流コイルは CT 二次（5A 回路）に直列に入るので、
      * CT → OCR → 各計器 と横一列につなぐ。電圧コイルは VT 二次から下の電圧回路で取る。
      */
-    const drawMetering = (ct: Element | null, ocr: boolean): number => {
+    const drawMetering = (ct: Element | null, relays: RelayKind[]): number => {
       const mY = ct ? ct.y : tapY + 15;
       /** 横一列に並べるときの隣どうしの隙間 */
       const GAP = 10;
@@ -316,9 +317,13 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       };
 
       let last: { el: Element; port: string } | null = ct ? { el: ct, port: 'E' } : null;
-      if (ct && ocr) {
-        const o = b.el('OCR', nextX('OCR'), mY, { labels: [] });
-        b.wire(ct, 'E', o, 'W', 'control');
+      // CT 二次に入る継電器（過電流・逆電力など）を CT のすぐ右に直列で並べる
+      const currRelays = ct ? relays.filter((r) => RELAY_CIRCUIT[r].c) : [];
+      for (const r of currRelays) {
+        const o = b.el(relaySymbolKind(r), nextX(relaySymbolKind(r)), mY, {
+          labels: r === 'RELAY' ? ['継電器'] : withModel([], hv.nameplates?.[relayKey(r) as HvSlot]),
+        });
+        if (last) b.wire(last.el, last.port, o, 'W', 'control');
         last = { el: o, port: 'E' };
       }
       if (!tap || !hasMetering) return mY;
@@ -343,6 +348,12 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
 
       // 電圧計は VT 二次だけを使う。切換開閉器を挟んで電圧回路につなぐ
       const voltTaps: Element[] = [...voltEls];
+      // VT 二次だけを使う継電器（不足電圧・過電圧・周波数など）
+      for (const r of relays.filter((x) => RELAY_CIRCUIT[x].v && !RELAY_CIRCUIT[x].c)) {
+        const k = relaySymbolKind(r);
+        const el = b.el(k, nextX(k), mY, { labels: withModel([], hv.nameplates?.[relayKey(r) as HvSlot]) });
+        voltTaps.push(el);
+      }
       voltOnlyKinds.forEach((k) => {
         const useVs = k === 'METER_V' && (hv.metering.vs ?? true);
         const vs = useVs ? b.el('VS', nextX('VS'), mY, { labels: withModel([], hv.nameplates?.vs) }) : null;
@@ -391,6 +402,7 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     // 主遮断装置 → 変流器 → 母線 の順に置く。
     // CT を主遮断装置の負荷側に置くと、遮断器を開けば CT 以降が無充電になる（分岐盤の見出しと同じ並び）
     const mb = hv.mainBreaker;
+    const mbRelays = orderRelays(mb.relays ?? (mb.ocr ? ['OCR'] : []));
     for (const dev of orderDevices(mb.devices)) {
       place(deviceSymbol(dev), withModel(deviceLabel(dev, mb), hv.nameplates?.[deviceKey(dev) as HvSlot]), {
         ratedA: mb.ratedA,
@@ -400,13 +412,13 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     let lowest = 0;
     if (mb.ct) {
       const ct = place('CT', withModel([`CT ${mb.ctRatio ?? ''}`.trim()], hv.nameplates?.ct));
-      lowest = drawMetering(ct, mb.ocr);
+      lowest = drawMetering(ct, mbRelays);
     } else if (currKinds.length > 0) {
       // 電流計・電力計は CT 二次から取るので、保護用 CT が無ければ計器用を足す
-      lowest = drawMetering(place('CT', withModel(['CT'], hv.nameplates?.ct)), false);
+      lowest = drawMetering(place('CT', withModel(['CT'], hv.nameplates?.ct)), mbRelays);
       b.warn('電流計・電力計は CT 二次から取るため、計器用 CT を追加しました（主遮断装置に CT が無いため）');
     } else {
-      lowest = drawMetering(null, false);
+      lowest = drawMetering(null, mbRelays);
     }
     // 計器・VT 二次の横母線が高圧母線とぶつからないよう、下端より下に母線を張る
     y = Math.max(y, lowest + 15);
@@ -514,9 +526,18 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
       last = ct;
       yy += 20;
       const ctLines = withModel([`CT ${f.ctRatio ?? ''}`.trim()], fnp('ct'));
-      if (f.ocr) {
-        const ocr = b.el('OCR', cx + 30, ct.y, { labels: [] });
-        b.wire(ct, 'E', ocr, 'W');
+      const fRelays = orderRelays(f.relays ?? (f.ocr ? ['OCR'] : []));
+      if (fRelays.length > 0) {
+        let rx = cx + 30;
+        let prev: Element = ct;
+        let prevPort = 'E';
+        for (const r of fRelays) {
+          const el = b.el(relaySymbolKind(r), rx, ct.y, { labels: [] });
+          b.wire(prev, prevPort, el, 'W', 'control');
+          prev = el;
+          prevPort = 'E';
+          rx += 30;
+        }
         b.textLines(cx + 30, ct.y + 9, ctLines, TEXT.rating, 'middle');
       } else {
         b.textLines(cx + 3, ct.y + 9, ctLines, TEXT.rating, 'start');

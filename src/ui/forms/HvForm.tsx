@@ -2,12 +2,17 @@ import type { CapacitorSpec, HvFeederSpec, HvSlot, HvSpec, LvPanelSpec, Nameplat
 import { HV_SLOT_LABEL } from '../../model/types';
 import { SWITCH_DEVICE_LABEL, deviceKey, hasBreakingKA, hasFuse, orderDevices } from '../../model/switchgear';
 import type { SwitchDevice } from '../../model/switchgear';
+import type { RelayKind } from '../../model/relay';
 import { TR_CONNECTIONS, TR_CONNECTION_LABEL, trConnection } from '../../model/transformer';
 import { NameplateFields, NameplateGroup, type NameplateItem } from './NameplateFields';
 import { newId } from '../../model/ids';
 import { moveAt } from '../../model/array';
 import { useDispatch } from '../../state/context';
-import { CheckField, NumberField, Row, Section, SelectField, SwitchPicker, TextField } from '../fields';
+import { CheckField, NumberField, RelayPicker, Row, Section, SelectField, SwitchPicker, TextField } from '../fields';
+import { RELAY_LABEL, orderRelays, relayKey } from '../../model/relay';
+
+/** 継電器。旧データは ocr 真偽値しか持たないので補う */
+const relaysOf = (o: { relays?: RelayKind[]; ocr?: boolean }) => orderRelays(o.relays ?? (o.ocr ? ['OCR'] : []));
 
 /** 一覧の並べ替え（左から右への並びが図面の並びになる） */
 function OrderCell({ i, n, onMove }: { i: number; n: number; onMove: (dir: -1 | 1) => void }) {
@@ -152,6 +157,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
   };
 
   const mb = hv.mainBreaker;
+  const mbRelays = relaysOf(mb);
 
   return (
     <div>
@@ -243,7 +249,12 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                   />{' '}
                 </>
               )}
-              <CheckField checked={mb.ocr} onChange={(v) => set({ mainBreaker: { ...mb, ocr: v } })} label="OCR" />
+            </Row>
+            <Row label="保護継電器">
+              <RelayPicker
+                value={mbRelays}
+                onChange={(v) => set({ mainBreaker: { ...mb, relays: v, ocr: v.includes('OCR') } })}
+              />
             </Row>
             <Row label="計器">
               <CheckField checked={hv.metering.vt} onChange={(v) => set({ metering: { ...hv.metering, vt: v } })} label="VT" />{' '}
@@ -293,7 +304,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                   <th>遮断 kA / PF A</th>
                   <th>CT</th>
                   <th>CT 比</th>
-                  <th>OCR</th>
+                  <th>継電器</th>
                   <th>ケーブル種別</th>
                   <th>sq</th>
                   <th>長さ m</th>
@@ -322,7 +333,12 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                     </td>
                     <td><CheckField checked={f.ct} onChange={(v) => setFeeder(f.id, { ct: v })} label="" /></td>
                     <td><TextField value={f.ctRatio ?? ''} width={70} onCommit={(v) => setFeeder(f.id, { ctRatio: v || undefined })} /></td>
-                    <td><CheckField checked={f.ocr} onChange={(v) => setFeeder(f.id, { ocr: v })} label="" /></td>
+                    <td>
+                      <RelayPicker
+                        value={relaysOf(f)}
+                        onChange={(v) => setFeeder(f.id, { relays: v, ocr: v.includes('OCR') })}
+                      />
+                    </td>
                     <td>
                       <TextField
                         value={f.cable?.type ?? ''}
@@ -358,7 +374,9 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                         items={[
                           ...deviceItems(f.devices, f.nameplates, (np) => setFeeder(f.id, { nameplates: np })),
                           ...(f.ct ? [npItem('ct', '変流器 (CT)', f.nameplates, (np) => setFeeder(f.id, { nameplates: np }))] : []),
-                          ...(f.ocr ? [npItem('ocr', '過電流継電器 (OCR)', f.nameplates, (np) => setFeeder(f.id, { nameplates: np }))] : []),
+                          ...relaysOf(f).map((r) =>
+                            npItem(relayKey(r), RELAY_LABEL[r], f.nameplates, (np) => setFeeder(f.id, { nameplates: np })),
+                          ),
                           ...(f.cable ? [npItem('cable', '高圧ケーブル', f.nameplates, (np) => setFeeder(f.id, { nameplates: np }))] : []),
                         ]}
                       />

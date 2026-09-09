@@ -2,6 +2,7 @@ import type { HvSlot, Nameplate, Project } from './types';
 import { deviceKey, deviceLabel, isLvDevice, orderDevices } from './switchgear';
 import { getSymbol } from '../symbols';
 import { trConnectionText } from './transformer';
+import { RELAY_SHORT, orderRelays, relayKey } from './relay';
 import type { SwitchDevice } from './switchgear';
 
 /** 銘板表 1 行分。すべて表示用の文字列に落としてある */
@@ -90,7 +91,9 @@ export function nameplateRows(project: Project): NameplateRow[] {
 
     const mb = hv.mainBreaker;
     if (mb.ct) out.push(row('CT', np('ct'), mb.ctRatio ?? '', '高圧受電盤'));
-    if (mb.ocr) out.push(row('OCR', np('ocr'), '', '高圧受電盤'));
+    for (const r of orderRelays(mb.relays ?? (mb.ocr ? ['OCR'] : []))) {
+      out.push(row(RELAY_SHORT[r], np(relayKey(r) as HvSlot), '', '高圧受電盤'));
+    }
     for (const dev of orderDevices(mb.devices)) {
       out.push(row(dev, np(deviceKey(dev) as HvSlot), ratingOf(dev, mb), '高圧受電盤'));
     }
@@ -101,7 +104,9 @@ export function nameplateRows(project: Project): NameplateRow[] {
         out.push(row(dev, fnp(deviceKey(dev)), ratingOf(dev, f), f.name));
       }
       if (f.ct) out.push(row('CT', fnp('ct'), f.ctRatio ?? '', f.name));
-      if (f.ocr) out.push(row('OCR', fnp('ocr'), '', f.name));
+      for (const r of orderRelays(f.relays ?? (f.ocr ? ['OCR'] : []))) {
+        out.push(row(RELAY_SHORT[r], fnp(relayKey(r)), '', f.name));
+      }
       if (f.cable) {
         out.push(
           row(

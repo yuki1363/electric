@@ -15,7 +15,7 @@ export function defaultHv(): HvSpec {
     cable: { type: 'CVT', sq: 38, lengthM: 30 },
     vct: true,
     ds: true,
-    mainBreaker: { devices: ['VCB'], ratedA: 600, breakingKA: 12.5, ct: true, ctRatio: '75/5A', ocr: true },
+    mainBreaker: { devices: ['VCB'], ratedA: 600, breakingKA: 12.5, ct: true, ctRatio: '75/5A', ocr: true, relays: ['OCR'] },
     la: true,
     metering: { vt: true, a: true, v: true, w: true, wh: false, pf: false, as: true, vs: true },
     feeders: [],

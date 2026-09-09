@@ -4,6 +4,7 @@ import { getSymbol, isSymbolKind } from '../symbols';
 import { safeFileName } from '../export/download';
 import { defaultHv, defaultMeta, defaultPanel } from './defaults';
 import { migrateDevices } from './switchgear';
+import { migrateRelays } from './relay';
 
 export const FILE_EXT = '.elec.json';
 
@@ -61,22 +62,30 @@ function validateDiagram(d: unknown, idx: number): Diagram {
  * 固定パターンの文字列で、主遮断装置は CB 形 / PF・S 形の 2 択だった。
  */
 function migrateHv(rawHv: Record<string, unknown>): Record<string, unknown> {
-  const withDevices = (v: unknown, legacyKey: 'switch' | 'breaker') => {
+  const withDevices = (v: unknown, legacyKey: 'switch' | 'breaker', relays = false) => {
     if (!isObj(v)) return v;
     const { [legacyKey]: legacy, ...rest } = v;
-    return { ...rest, devices: migrateDevices(v.devices ?? legacy) };
+    return {
+      ...rest,
+      devices: migrateDevices(v.devices ?? legacy),
+      // 継電器を持つのは分岐盤と主遮断装置だけ
+      ...(relays ? { relays: migrateRelays(v.relays, v.ocr) } : {}),
+    };
   };
-  const list = (v: unknown, legacyKey: 'switch' | 'breaker') =>
-    Array.isArray(v) ? v.map((x) => withDevices(x, legacyKey)) : [];
+  const list = (v: unknown, legacyKey: 'switch' | 'breaker', relays = false) =>
+    Array.isArray(v) ? v.map((x) => withDevices(x, legacyKey, relays)) : [];
 
   const out: Record<string, unknown> = {
     ...rawHv,
-    feeders: list(rawHv.feeders, 'breaker'),
+    feeders: list(rawHv.feeders, 'breaker', true),
     transformers: list(rawHv.transformers, 'switch'),
     capacitors: list(rawHv.capacitors, 'switch'),
   };
 
   const mb = rawHv.mainBreaker;
+  if (isObj(mb) && Array.isArray(mb.devices)) {
+    out.mainBreaker = { ...mb, relays: migrateRelays(mb.relays, mb.ocr) };
+  }
   if (isObj(mb) && !Array.isArray(mb.devices)) {
     const vcb = isObj(mb.vcb) ? mb.vcb : {};
     const lbs = isObj(mb.lbs) ? mb.lbs : {};
@@ -88,6 +97,7 @@ function migrateHv(rawHv: Record<string, unknown>): Record<string, unknown> {
             pfA: typeof mb.pfA === 'number' ? mb.pfA : 40,
             ct: false,
             ocr: false,
+            relays: [],
           }
         : {
             devices: ['VCB'],
@@ -96,6 +106,7 @@ function migrateHv(rawHv: Record<string, unknown>): Record<string, unknown> {
             ct: true,
             ctRatio: typeof mb.ctRatio === 'string' ? mb.ctRatio : '75/5A',
             ocr: mb.ocr !== false,
+            relays: mb.ocr !== false ? ['OCR'] : [],
           };
   }
   return out;

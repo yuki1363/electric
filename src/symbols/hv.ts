@@ -233,21 +233,42 @@ export const VT: SymbolDef = {
   defaultLabels: ['VT'],
 };
 
-/** 過電流継電器 OCR: 箱 + 文字 */
-export const OCR: SymbolDef = {
-  kind: 'OCR',
-  nameJa: '過電流継電器 (OCR)',
-  category: 'hv',
-  bbox: { w: 20, h: 10 },
-  prims: [L(-10, 0, -8, 0), RECT(-8, -5, 8, 5), T(0, 0, 'OCR', 3), L(8, 0, 10, 0)],
-  // E は CT 二次側の続き（電流計などが直列に入る）
-  ports: [
-    { id: 'W', x: -10, y: 0, dir: 'W' },
-    { id: 'E', x: 10, y: 0, dir: 'E' },
-  ],
-  labelAnchor: rightLabel(20),
-  defaultLabels: [],
-};
+/**
+ * 継電器のひな形: 箱 + 文字。
+ * W から入って E へ抜けるので、計器回路の横一列にそのまま直列で入る。
+ */
+function relaySymbol(kind: SymbolKind, text: string, nameJa: string): SymbolDef {
+  return {
+    kind,
+    nameJa,
+    category: 'hv',
+    bbox: { w: 20, h: 10 },
+    // 文字数が多いと箱に収まらないので少し小さくする
+    prims: [L(-10, 0, -8, 0), RECT(-8, -5, 8, 5), T(0, 0, text, text.length >= 4 ? 2.4 : 3), L(8, 0, 10, 0)],
+    // W→E は計測回路の直列。N/S は電圧回路の横母線へ引き下げるのに使う
+    ports: [
+      { id: 'W', x: -10, y: 0, dir: 'W' },
+      { id: 'E', x: 10, y: 0, dir: 'E' },
+      { id: 'N', x: 0, y: -5, dir: 'N' },
+      { id: 'S', x: 0, y: 5, dir: 'S' },
+    ],
+    labelAnchor: rightLabel(20),
+    defaultLabels: [],
+  };
+}
+
+/** 過電流継電器 OCR (51) */
+export const OCR = relaySymbol('OCR', 'OCR', '過電流継電器 (OCR・51)');
+export const OCGR = relaySymbol('OCGR', 'OCGR', '地絡過電流継電器 (OCGR・51G)');
+export const DGR = relaySymbol('DGR', 'DGR', '地絡方向継電器 (DGR・67G)');
+export const OVGR = relaySymbol('OVGR', 'OVGR', '地絡過電圧継電器 (OVGR・64)');
+export const UVR = relaySymbol('UVR', 'UVR', '不足電圧継電器 (UVR・27)');
+export const OVR = relaySymbol('OVR', 'OVR', '過電圧継電器 (OVR・59)');
+export const RPR = relaySymbol('RPR', 'RPR', '逆電力継電器 (RPR・67P)');
+export const UFR = relaySymbol('UFR', 'UFR', '不足周波数継電器 (UFR・81U)');
+export const OFR = relaySymbol('OFR', 'OFR', '過周波数継電器 (OFR・81O)');
+/** 名前をラベルで打つための無地の継電器 */
+export const RELAY = relaySymbol('RELAY', '', '継電器（名称はラベル）');
 
 /** 単相変圧器: 重なる2円 */
 export const TR_1PH: SymbolDef = {
@@ -363,6 +384,15 @@ export const HV_SYMBOLS: SymbolDef[] = [
   VT,
   ZCT,
   OCR,
+  OCGR,
+  DGR,
+  OVGR,
+  UVR,
+  OVR,
+  RPR,
+  UFR,
+  OFR,
+  RELAY,
   TR_1PH,
   TR_3PH,
   TR_3PH_DY,

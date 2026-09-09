@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { SwitchDevice } from '../model/switchgear';
+import type { RelayKind } from '../model/relay';
+import { RELAY_KINDS, RELAY_LABEL, RELAY_SHORT, moveRelay, orderRelays, summaryRelays, toggleRelay } from '../model/relay';
 import {
   SWITCH_DEVICES,
   SWITCH_DEVICE_SHORT,
@@ -151,13 +153,15 @@ export function CheckField({
   checked,
   onChange,
   label,
+  title,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: ReactNode;
+  title?: string;
 }) {
   return (
-    <label className="check">
+    <label className="check" title={title}>
       <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} /> {label}
     </label>
   );
@@ -236,6 +240,48 @@ export function SwitchPicker({
         </div>
       ) : (
         <div className="switch-picker-summary">{switchSummary(value)}</div>
+      )}
+    </div>
+  );
+}
+
+/** 保護継電器の足し引きと並べ替え。開閉装置の SwitchPicker と同じ作り */
+export function RelayPicker({ value, onChange }: { value: RelayKind[]; onChange: (v: RelayKind[]) => void }) {
+  const cur = orderRelays(value);
+  return (
+    <div className="switch-picker">
+      <div className="switch-picker-boxes">
+        {RELAY_KINDS.map((r) => (
+          <CheckField
+            key={r}
+            checked={cur.includes(r)}
+            onChange={(on) => onChange(toggleRelay(cur, r, on))}
+            label={RELAY_SHORT[r]}
+            title={RELAY_LABEL[r]}
+          />
+        ))}
+      </div>
+      {cur.length > 1 ? (
+        <div className="switch-picker-order">
+          {cur.map((r, i) => (
+            <span key={r} className="switch-chip">
+              {RELAY_SHORT[r]}
+              <button className="tiny" title="1 つ前へ" disabled={i === 0} onClick={() => onChange(moveRelay(cur, r, -1))}>
+                ←
+              </button>
+              <button
+                className="tiny"
+                title="1 つ後ろへ"
+                disabled={i === cur.length - 1}
+                onClick={() => onChange(moveRelay(cur, r, 1))}
+              >
+                →
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <div className="switch-picker-summary">{summaryRelays(cur)}</div>
       )}
     </div>
   );

@@ -61,6 +61,14 @@ export type HvSlot =
   | 'vcb'
   | 'ct'
   | 'ocr'
+  | 'ocgr'
+  | 'ovgr'
+  | 'uvr'
+  | 'ovr'
+  | 'rpr'
+  | 'ufr'
+  | 'ofr'
+  | 'relay'
   | 'lbs'
   | 'pf'
   | 'vcs'
@@ -90,6 +98,14 @@ export const HV_SLOT_LABEL: Record<HvSlot, string> = {
   vcb: '真空遮断器 (VCB)',
   ct: '変流器 (CT)',
   ocr: '過電流継電器 (OCR)',
+  ocgr: '地絡過電流継電器 (OCGR)',
+  ovgr: '地絡過電圧継電器 (OVGR)',
+  uvr: '不足電圧継電器 (UVR)',
+  ovr: '過電圧継電器 (OVR)',
+  rpr: '逆電力継電器 (RPR)',
+  ufr: '不足周波数継電器 (UFR)',
+  ofr: '過周波数継電器 (OFR)',
+  relay: 'その他の継電器',
   lbs: '負荷開閉器 (LBS)',
   pf: '限流ヒューズ (PF)',
   vcs: '真空電磁接触器 (VCS)',
@@ -127,6 +143,8 @@ export type { SwitchDevice } from './switchgear';
 import type { SwitchDevice } from './switchgear';
 
 export type { TrConnection } from './transformer';
+export type { RelayKind } from './relay';
+import type { RelayKind } from './relay';
 import type { TrConnection } from './transformer';
 
 export interface TransformerSpec {
@@ -192,6 +210,8 @@ export interface HvFeederSpec {
   /** 例: 100/5A */
   ctRatio?: string;
   ocr: boolean;
+  /** 保護継電器。未設定なら ocr から移行する */
+  relays?: RelayKind[];
   cable?: { type: string; sq: number; lengthM?: number };
   /** 負荷名（配下に機器を置かない場合の行き先表示） */
   loadName?: string;
@@ -212,6 +232,8 @@ export interface HvMainBreaker {
   /** 例: 75/5A */
   ctRatio?: string;
   ocr: boolean;
+  /** 保護継電器。未設定なら ocr から移行する */
+  relays?: RelayKind[];
 }
 
 export interface HvSpec {

@@ -27,7 +27,7 @@ describe('機器銘板表', () => {
     expect(r).toBeTruthy();
     expect(r.model).toBe('CO-9');
     // 機器名称は未入力なら図記号の名前
-    expect(r.deviceName).toBe('過電流継電器 (OCR)');
+    expect(r.deviceName).toBe('過電流継電器 (OCR・51)');
     // 定格が空ならラベルの 1 行目で埋める
     expect(r.ratingText).toBe('予備 OCR');
     // 備考は図面名
