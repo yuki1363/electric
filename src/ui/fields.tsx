@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { SwitchDevice } from '../model/switchgear';
-import { SWITCH_DEVICES, SWITCH_DEVICE_SHORT, switchSummary, toggleDevice } from '../model/switchgear';
+import {
+  SWITCH_DEVICES,
+  SWITCH_DEVICE_SHORT,
+  canonicalDevices,
+  moveDevice,
+  orderDevices,
+  switchSummary,
+  toggleDevice,
+} from '../model/switchgear';
 
 /** blur / Enter で確定するテキスト入力（履歴を1手にまとめる） */
 export function TextField({
@@ -199,7 +207,36 @@ export function SwitchPicker({
           />
         ))}
       </div>
-      <div className="switch-picker-summary">{switchSummary(value)}</div>
+      {value.length > 1 ? (
+        <div className="switch-picker-order">
+          {orderDevices(value).map((dev, i, arr) => (
+            <span key={dev} className="switch-chip">
+              {SWITCH_DEVICE_SHORT[dev]}
+              <button
+                className="tiny"
+                title="1 つ上流へ"
+                disabled={i === 0}
+                onClick={() => onChange(moveDevice(value, dev, -1))}
+              >
+                ↑
+              </button>
+              <button
+                className="tiny"
+                title="1 つ下流へ"
+                disabled={i === arr.length - 1}
+                onClick={() => onChange(moveDevice(value, dev, 1))}
+              >
+                ↓
+              </button>
+            </span>
+          ))}
+          <button className="tiny" title="既定の順に戻す" onClick={() => onChange(canonicalDevices(value))}>
+            既定順
+          </button>
+        </div>
+      ) : (
+        <div className="switch-picker-summary">{switchSummary(value)}</div>
+      )}
     </div>
   );
 }

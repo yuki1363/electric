@@ -1,4 +1,5 @@
 import type { SymbolKind } from '../symbols/types';
+import { moveAt } from './array';
 
 /**
  * 高圧の開閉装置。
@@ -39,18 +40,42 @@ export const SWITCH_DEVICE_SHORT: Record<SwitchDevice, string> = {
 
 const isDevice = (v: unknown): v is SwitchDevice => SWITCH_DEVICES.includes(v as SwitchDevice);
 
-/** 重複を除き、上流→下流の順に並べ替える */
+/**
+ * 重複と未知の値を除く。**並び順は渡された順（上流→下流）のまま**。
+ * 現場によって並びが違うので、既定順に矯正しない。
+ */
 export function orderDevices(devs: readonly SwitchDevice[] | undefined): SwitchDevice[] {
   if (!Array.isArray(devs)) return [];
-  return SWITCH_DEVICES.filter((d) => devs.includes(d));
+  const seen = new Set<SwitchDevice>();
+  const out: SwitchDevice[] = [];
+  for (const d of devs) {
+    if (!isDevice(d) || seen.has(d)) continue;
+    seen.add(d);
+    out.push(d);
+  }
+  return out;
 }
 
-/** チェックの入切 */
+/** 既定の並び順にそろえる（旧データの移行と「既定の順に戻す」で使う） */
+export function canonicalDevices(devs: readonly SwitchDevice[] | undefined): SwitchDevice[] {
+  const o = orderDevices(devs);
+  return SWITCH_DEVICES.filter((d) => o.includes(d));
+}
+
+/** チェックの入切。入れるときは既定順の位置に差し込む（既存の並びは崩さない） */
 export function toggleDevice(devs: readonly SwitchDevice[], dev: SwitchDevice, on: boolean): SwitchDevice[] {
-  const set = new Set(orderDevices(devs));
-  if (on) set.add(dev);
-  else set.delete(dev);
-  return orderDevices([...set]);
+  const cur = orderDevices(devs);
+  if (!on) return cur.filter((d) => d !== dev);
+  if (cur.includes(dev)) return cur;
+  const rank = (d: SwitchDevice) => SWITCH_DEVICES.indexOf(d);
+  const at = cur.findIndex((d) => rank(d) > rank(dev));
+  return at < 0 ? [...cur, dev] : [...cur.slice(0, at), dev, ...cur.slice(at)];
+}
+
+/** 並びの中で 1 つ上流（dir -1）／下流（dir 1）へ動かす */
+export function moveDevice(devs: readonly SwitchDevice[], dev: SwitchDevice, dir: -1 | 1): SwitchDevice[] {
+  const cur = orderDevices(devs);
+  return moveAt(cur, cur.indexOf(dev), dir);
 }
 
 /** 画面表示用の要約 */
@@ -110,6 +135,7 @@ export const deviceKey = (dev: SwitchDevice): string => dev.toLowerCase();
  * 'LBS' は「LBS + 限流ヒューズ」を意味していた。
  */
 export function migrateDevices(v: unknown): SwitchDevice[] {
+  // 配列で保存されているものは並びをそのまま活かす
   if (Array.isArray(v)) return orderDevices(v.filter(isDevice));
   if (typeof v !== 'string') return [];
   const parts = v.split('+').map((s) => s.trim().toUpperCase());
@@ -121,5 +147,5 @@ export function migrateDevices(v: unknown): SwitchDevice[] {
     // 旧 'LBS' / 'LBS+VCS' は限流ヒューズ付きを指していた
     if (p === 'LBS' && !parts.includes('PF')) out.push('PF');
   }
-  return orderDevices(out);
+  return canonicalDevices(out);
 }

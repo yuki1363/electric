@@ -40,6 +40,27 @@ describe('高圧受電設備 単線結線図 生成', () => {
     expect(count('GROUND_A')).toBe(1);
   });
 
+  it('変圧器の配列を入れ替えると母線上の左右も入れ替わる', () => {
+    const xOf = (hv: typeof p.hv, name: string) => {
+      const d2 = generateHvSld(hv, p.meta, p.panels)[0]!.diagram;
+      return d2.elements.find((e) => e.labels[0] === name)!.x;
+    };
+    const before = p.hv;
+    const swapped = { ...p.hv, transformers: [p.hv.transformers[1]!, p.hv.transformers[0]!] };
+    expect(xOf(before, 'Tr-1')).toBeLessThan(xOf(before, 'Tr-2'));
+    expect(xOf(swapped, 'Tr-2')).toBeLessThan(xOf(swapped, 'Tr-1'));
+  });
+
+  it('開閉装置は指定した順（既定順でなくても）に上から並ぶ', () => {
+    const hv = structuredClone(p.hv);
+    hv.transformers[0]!.devices = ['PF', 'LBS'] as SwitchDevice[];
+    const d2 = generateHvSld(hv, p.meta, p.panels)[0]!.diagram;
+    const tr = d2.elements.find((e) => e.labels[0] === 'Tr-1')!;
+    const pf = d2.elements.filter((e) => e.kind === 'PF' && Math.abs(e.x - tr.x) < 1)[0]!;
+    const lbs = d2.elements.filter((e) => e.kind === 'LBS' && Math.abs(e.x - tr.x) < 1)[0]!;
+    expect(pf.y).toBeLessThan(lbs.y);
+  });
+
   it('MCCB は配線用遮断器の図記号、DTMC は発電系統への引き出し線を持つ', () => {
     const hv = structuredClone(p.hv);
     hv.transformers[0]!.devices = ['DTMC', 'MCCB'] as SwitchDevice[];

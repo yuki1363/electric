@@ -5,8 +5,23 @@ import type { SwitchDevice } from '../../model/switchgear';
 import { TR_CONNECTIONS, TR_CONNECTION_LABEL, trConnection } from '../../model/transformer';
 import { NameplateFields, NameplateGroup, type NameplateItem } from './NameplateFields';
 import { newId } from '../../model/ids';
+import { moveAt } from '../../model/array';
 import { useDispatch } from '../../state/context';
 import { CheckField, NumberField, Row, Section, SelectField, SwitchPicker, TextField } from '../fields';
+
+/** 一覧の並べ替え（左から右への並びが図面の並びになる） */
+function OrderCell({ i, n, onMove }: { i: number; n: number; onMove: (dir: -1 | 1) => void }) {
+  return (
+    <td className="row-ops">
+      <button className="tiny" title="1 つ左へ" disabled={i === 0} onClick={() => onMove(-1)}>
+        ←
+      </button>
+      <button className="tiny" title="1 つ右へ" disabled={i === n - 1} onClick={() => onMove(1)}>
+        →
+      </button>
+    </td>
+  );
+}
 
 /** 二次電圧の入力候補（任意の値も入力できる） */
 const SECONDARY_OPTIONS = ['105-210V', '210V', '105V', '420V', '440V', '400V', '210/105V'];
@@ -271,6 +286,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
             <table className="grid-table">
               <thead>
                 <tr>
+                  <th>並び</th>
                   <th>盤名</th>
                   <th>遮断/開閉</th>
                   <th>定格 A</th>
@@ -287,8 +303,9 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                 </tr>
               </thead>
               <tbody>
-                {hv.feeders.map((f) => (
+                {hv.feeders.map((f, i) => (
                   <tr key={f.id}>
+                    <OrderCell i={i} n={hv.feeders.length} onMove={(dir) => set({ feeders: moveAt(hv.feeders, i, dir) })} />
                     <td><TextField value={f.name} onCommit={(v) => setFeeder(f.id, { name: v })} width={140} /></td>
                     <td>
                       <SwitchPicker value={f.devices} onChange={(v) => setFeeder(f.id, { devices: v })} />
@@ -357,6 +374,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
             <table className="grid-table">
               <thead>
                 <tr>
+                  <th>並び</th>
                   <th>名称</th>
                   <th>相</th>
                   <th>結線</th>
@@ -372,8 +390,13 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                 </tr>
               </thead>
               <tbody>
-                {hv.transformers.map((t) => (
+                {hv.transformers.map((t, i) => (
                   <tr key={t.id}>
+                    <OrderCell
+                      i={i}
+                      n={hv.transformers.length}
+                      onMove={(dir) => set({ transformers: moveAt(hv.transformers, i, dir) })}
+                    />
                     <td><TextField value={t.name} onCommit={(v) => setTr(t.id, { name: v })} width={70} /></td>
                     <td>
                       <SelectField value={t.phase} options={[{ value: '1φ', label: '単相' }, { value: '3φ', label: '三相' }]} onChange={(v) => setTr(t.id, { phase: v })} />
@@ -468,6 +491,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
             <table className="grid-table">
               <thead>
                 <tr>
+                  <th>並び</th>
                   <th>名称</th>
                   <th>容量 kvar</th>
                   <th>直列リアクトル</th>
@@ -479,8 +503,13 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                 </tr>
               </thead>
               <tbody>
-                {hv.capacitors.map((c) => (
+                {hv.capacitors.map((c, i) => (
                   <tr key={c.id}>
+                    <OrderCell
+                      i={i}
+                      n={hv.capacitors.length}
+                      onMove={(dir) => set({ capacitors: moveAt(hv.capacitors, i, dir) })}
+                    />
                     <td><TextField value={c.name} onCommit={(v) => setSc(c.id, { name: v })} width={70} /></td>
                     <td><NumberField value={c.kvar} onCommit={(v) => setSc(c.id, { kvar: v ?? 50 })} /></td>
                     <td><CheckField checked={c.sr} onChange={(v) => setSc(c.id, { sr: v })} label="SR 6%" /></td>

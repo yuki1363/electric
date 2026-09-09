@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   SWITCH_DEVICES,
+  canonicalDevices,
   deviceLabel,
   deviceSymbol,
   hasBreakingKA,
   hasFuse,
   isLvDevice,
   migrateDevices,
+  moveDevice,
   orderDevices,
   switchSummary,
   toggleDevice,
@@ -16,11 +18,15 @@ import { sampleProject } from '../src/model/defaults';
 import type { HvFeederSpec, SwitchDevice } from '../src/model/types';
 
 describe('開閉装置の組み合わせ', () => {
-  it('選んだ順によらず上流→下流に並べ替え、重複は除く', () => {
-    expect(orderDevices(['PF', 'LBS'])).toEqual(['LBS', 'PF']);
-    expect(orderDevices(['VCS', 'PF', 'LBS'])).toEqual(['LBS', 'PF', 'VCS']);
+  it('並びは入力どおりに保ち、重複は除く', () => {
+    // 並びは入力どおりに保つ（現場によって順が違う）
+    expect(orderDevices(['PF', 'LBS'])).toEqual(['PF', 'LBS']);
+    expect(orderDevices(['VCS', 'PF', 'LBS'])).toEqual(['VCS', 'PF', 'LBS']);
     expect(orderDevices(['PF', 'PF'])).toEqual(['PF']);
     expect(orderDevices([])).toEqual([]);
+    // 既定順にそろえるのは canonicalDevices
+    expect(canonicalDevices(['PF', 'LBS'])).toEqual(['LBS', 'PF']);
+    expect(canonicalDevices(['VCS', 'PF', 'LBS'])).toEqual(['LBS', 'PF', 'VCS']);
     expect(orderDevices(undefined)).toEqual([]);
   });
 
@@ -32,7 +38,8 @@ describe('開閉装置の組み合わせ', () => {
   });
 
   it('要約は描かれる順に出す', () => {
-    expect(switchSummary(['VCS', 'LBS', 'PF'])).toBe('LBS → PF → VCS');
+    expect(switchSummary(['VCS', 'LBS', 'PF'])).toBe('VCS → LBS → PF');
+    expect(switchSummary(canonicalDevices(['VCS', 'LBS', 'PF']))).toBe('LBS → PF → VCS');
     expect(switchSummary(['PF'])).toBe('PF');
     expect(switchSummary([])).toBe('開閉器なし');
   });
@@ -65,7 +72,10 @@ describe('開閉装置の組み合わせ', () => {
 
   it('移行は新形式・壊れた値も受ける', () => {
     expect(migrateDevices(['LBS', 'PF'])).toEqual(['LBS', 'PF']);
-    expect(migrateDevices(['PF', 'LBS'])).toEqual(['LBS', 'PF']); // 並べ替える
+    // 配列で保存されているものは手で入れ替えた並びなので、そのまま活かす
+    expect(migrateDevices(['PF', 'LBS'])).toEqual(['PF', 'LBS']);
+    // 旧形式の文字列からの移行は既定順にそろえる
+    expect(migrateDevices('LBS+VCS')).toEqual(['LBS', 'PF', 'VCS']);
     expect(migrateDevices(['XX'])).toEqual([]);
     expect(migrateDevices(undefined)).toEqual([]);
     expect(migrateDevices('')).toEqual([]);
@@ -82,7 +92,7 @@ describe('開閉装置の組み合わせ', () => {
     expect(deviceLabel('LBS_PF', {})).toEqual(['PF付LBS']);
     expect(switchSummary(['LBS_PF'])).toBe('PF付LBS');
     // LBS + PF を別々に選んだ場合と混ざらない
-    expect(orderDevices(['PF', 'LBS_PF'])).toEqual(['LBS_PF', 'PF']);
+    expect(canonicalDevices(['PF', 'LBS_PF'])).toEqual(['LBS_PF', 'PF']);
   });
 });
 
@@ -148,7 +158,7 @@ describe('MCCB・DTMC', () => {
 
   it('DTMC は自前の図記号を持ち、いちばん上流に並ぶ', () => {
     expect(deviceSymbol('DTMC')).toBe('DTMC');
-    expect(orderDevices(['MCCB', 'DTMC'])).toEqual(['DTMC', 'MCCB']);
+    expect(canonicalDevices(['MCCB', 'DTMC'])).toEqual(['DTMC', 'MCCB']);
     expect(deviceLabel('DTMC', { ratedA: 600 })).toEqual(['DTMC 600A']);
   });
 
@@ -156,5 +166,22 @@ describe('MCCB・DTMC', () => {
     expect(isLvDevice('MCCB')).toBe(true);
     expect(isLvDevice('DTMC')).toBe(true);
     expect(isLvDevice('VCB')).toBe(false);
+  });
+});
+
+describe('並べ替え', () => {
+  it('チェックを入れると既定順の位置に差し込む（既存の並びは崩さない）', () => {
+    expect(toggleDevice(['LBS'], 'PF', true)).toEqual(['LBS', 'PF']);
+    expect(toggleDevice(['PF'], 'LBS', true)).toEqual(['LBS', 'PF']);
+    // 手で入れ替えた並びはそのまま
+    expect(toggleDevice(['PF', 'LBS'], 'VCS', true)).toEqual(['PF', 'LBS', 'VCS']);
+    expect(toggleDevice(['LBS', 'PF'], 'PF', false)).toEqual(['LBS']);
+  });
+
+  it('上下に動かせる。端では変わらない', () => {
+    expect(moveDevice(['LBS', 'PF', 'VCS'], 'PF', -1)).toEqual(['PF', 'LBS', 'VCS']);
+    expect(moveDevice(['LBS', 'PF', 'VCS'], 'PF', 1)).toEqual(['LBS', 'VCS', 'PF']);
+    expect(moveDevice(['LBS', 'PF'], 'LBS', -1)).toEqual(['LBS', 'PF']);
+    expect(moveDevice(['LBS', 'PF'], 'PF', 1)).toEqual(['LBS', 'PF']);
   });
 });
