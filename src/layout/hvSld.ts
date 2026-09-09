@@ -1,5 +1,6 @@
 import type { Element, HvSlot, HvSpec, LvPanelSpec, ProjectMeta } from '../model/types';
 import { deviceKey, deviceLabel, deviceSymbol, orderDevices, type SwitchDevice } from '../model/switchgear';
+import { trConnectionText, trSymbolKind } from '../model/transformer';
 import type { SymbolKind as SK } from '../symbols/types';
 import { DiagramBuilder } from './builder';
 import { bboxOfPrims, emptyBBox, inflate, isEmptyBBox, union } from '../geom/bbox';
@@ -137,7 +138,10 @@ function neededPitch(hv: HvSpec): number {
     for (const r of rest) widths.push(estimateTextWidth(r, TEXT.rating));
   };
   for (const t of hv.transformers) {
-    add(t.name, [`${t.phase} ${t.kva}kVA`, `${t.primary || '6.6kV'}/${t.secondary}`]);
+    add(t.name, [
+      `${t.phase} ${t.kva}kVA`,
+      [`${t.primary || '6.6kV'}/${t.secondary}`, trConnectionText(t)].filter(Boolean).join(' '),
+    ]);
   }
   for (const c of hv.capacitors) add(c.name, [`${c.kvar}kvar`]);
   const widest = Math.max(...widths);
@@ -582,8 +586,15 @@ function buildHvPage(hv: HvSpec, meta: ProjectMeta, panels: LvPanelSpec[], o: Hv
     const cx = snapValue(x + ((width - 1) * bp) / 2, GRID);
     const t = node.spec;
     const last = drawStack(from, cx, level, t);
-    const tr = b.el(t.phase === '1φ' ? 'TR_1PH' : 'TR_3PH', cx, baseYs[level]!, {
-      labels: withModel([t.name, `${t.phase} ${t.kva}kVA`, `${t.primary || '6.6kV'}/${t.secondary}`], t.nameplate),
+    const tr = b.el(trSymbolKind(t), cx, baseYs[level]!, {
+      labels: withModel(
+        [
+          t.name,
+          `${t.phase} ${t.kva}kVA`,
+          [`${t.primary || '6.6kV'}/${t.secondary}`, trConnectionText(t)].filter(Boolean).join(' '),
+        ],
+        t.nameplate,
+      ),
       props: { kva: t.kva, phase: t.phase, secondary: t.secondary },
     });
     b.wire(last, 'S', tr, 'N');

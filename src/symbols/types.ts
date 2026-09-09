@@ -71,6 +71,11 @@ export type SymbolKind =
   | 'OCR'
   | 'TR_1PH'
   | 'TR_3PH'
+  | 'TR_3PH_DY'
+  | 'TR_3PH_YD'
+  | 'TR_3PH_YY'
+  | 'TR_3PH_VV'
+  | 'TR_SCOTT'
   | 'SC'
   | 'SR'
   // 低圧

@@ -1,6 +1,7 @@
 import type { HvSlot, Nameplate, Project } from './types';
 import { deviceKey, deviceLabel, isLvDevice, orderDevices } from './switchgear';
 import { getSymbol } from '../symbols';
+import { trConnectionText } from './transformer';
 import type { SwitchDevice } from './switchgear';
 
 /** 銘板表 1 行分。すべて表示用の文字列に落としてある */
@@ -117,7 +118,15 @@ export function nameplateRows(project: Project): NameplateRow[] {
       for (const dev of orderDevices(t.devices)) {
         out.push(row(dev, t.nameplates?.[deviceKey(dev)], ratingOf(dev, t), t.name));
       }
-      out.push(row('Tr', t.nameplate, `${t.phase} ${t.kva}kVA ${t.primary || '6.6kV'}/${t.secondary}`, t.name));
+      const conn = trConnectionText(t);
+      out.push(
+        row(
+          'Tr',
+          t.nameplate,
+          `${t.phase} ${t.kva}kVA ${t.primary || '6.6kV'}/${t.secondary}${conn ? ` ${conn}` : ''}`,
+          t.name,
+        ),
+      );
     }
     for (const c of hv.capacitors) {
       for (const dev of orderDevices(c.devices)) {

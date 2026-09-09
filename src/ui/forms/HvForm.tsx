@@ -2,6 +2,7 @@ import type { CapacitorSpec, HvFeederSpec, HvSlot, HvSpec, LvPanelSpec, Nameplat
 import { HV_SLOT_LABEL } from '../../model/types';
 import { SWITCH_DEVICE_LABEL, deviceKey, hasBreakingKA, hasFuse, orderDevices } from '../../model/switchgear';
 import type { SwitchDevice } from '../../model/switchgear';
+import { TR_CONNECTIONS, TR_CONNECTION_LABEL, trConnection } from '../../model/transformer';
 import { NameplateFields, NameplateGroup, type NameplateItem } from './NameplateFields';
 import { newId } from '../../model/ids';
 import { useDispatch } from '../../state/context';
@@ -358,6 +359,7 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                 <tr>
                   <th>名称</th>
                   <th>相</th>
+                  <th>結線</th>
                   <th>容量 kVA</th>
                   <th>一次電圧</th>
                   <th>二次電圧</th>
@@ -375,6 +377,17 @@ export function HvForm({ hv, panels }: { hv: HvSpec; panels: LvPanelSpec[] }) {
                     <td><TextField value={t.name} onCommit={(v) => setTr(t.id, { name: v })} width={70} /></td>
                     <td>
                       <SelectField value={t.phase} options={[{ value: '1φ', label: '単相' }, { value: '3φ', label: '三相' }]} onChange={(v) => setTr(t.id, { phase: v })} />
+                    </td>
+                    <td>
+                      {t.phase === '3φ' ? (
+                        <SelectField
+                          value={trConnection(t.connection)}
+                          options={TR_CONNECTIONS.map((c) => ({ value: c, label: TR_CONNECTION_LABEL[c] }))}
+                          onChange={(v) => setTr(t.id, { connection: v })}
+                        />
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
                     </td>
                     <td><NumberField value={t.kva} onCommit={(v) => setTr(t.id, { kva: v ?? 100 })} /></td>
                     <td>

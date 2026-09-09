@@ -126,11 +126,16 @@ export type TrSecondary = string;
 export type { SwitchDevice } from './switchgear';
 import type { SwitchDevice } from './switchgear';
 
+export type { TrConnection } from './transformer';
+import type { TrConnection } from './transformer';
+
 export interface TransformerSpec {
   id: Id;
   /** 例: Tr-1 */
   name: string;
   phase: TrPhase;
+  /** 三相の結線（既定 Δ-Δ）。図記号と銘板の表記に効く */
+  connection?: TrConnection;
   kva: number;
   /** 一次電圧。低圧用変圧器（440V→210V など）にも使えるよう入力できる */
   primary?: string;

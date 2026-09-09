@@ -1,4 +1,4 @@
-import type { SymbolDef } from './types';
+import type { Prim, SymbolDef, SymbolKind } from './types';
 import { ARC, C, L, PL, RECT, T, bladePrims, crossPrims, portsNS, rightLabel } from './helpers';
 
 const std = { w: 10, h: 20 };
@@ -261,38 +261,59 @@ export const TR_1PH: SymbolDef = {
   defaultLabels: ['Tr', '1φ'],
 };
 
-/** 三相変圧器: 重なる2円 + 各円に Δ */
-export const TR_3PH: SymbolDef = {
-  kind: 'TR_3PH',
-  nameJa: '三相変圧器',
-  category: 'hv',
-  bbox: { w: 12, h: 20 },
-  prims: [
-    L(0, -10, 0, -8),
-    C(0, -3, 5),
-    C(0, 3, 5),
-    PL(
-      [
-        [-1.8, -3.2],
-        [1.8, -3.2],
-        [0, -6.2],
-      ],
-      true,
-    ),
-    PL(
-      [
-        [-1.8, 5.2],
-        [1.8, 5.2],
-        [0, 2.2],
-      ],
-      true,
-    ),
-    L(0, 8, 0, 10),
-  ],
-  ports: portsNS(),
-  labelAnchor: rightLabel(12),
-  defaultLabels: ['Tr', '3φ'],
-};
+/** 巻線の結線記号。円の中心 cy に描く */
+type Winding = 'D' | 'Y' | 'V' | 'T';
+
+function windingPrims(cy: number, w: Winding): Prim[] {
+  switch (w) {
+    case 'D': // Δ 結線（三角）
+      return [
+        PL(
+          [
+            [-1.8, cy + 1.6],
+            [1.8, cy + 1.6],
+            [0, cy - 1.6],
+          ],
+          true,
+        ),
+      ];
+    case 'Y': // Y（星形）結線。中心から 3 方向
+      return [L(0, cy, 0, cy - 2.2), L(0, cy, -1.9, cy + 1.3), L(0, cy, 1.9, cy + 1.3)];
+    case 'V': // V 結線（開放 Δ）。三角の 2 辺だけ
+      return [L(-1.8, cy - 1.6, 0, cy + 1.6), L(0, cy + 1.6, 1.8, cy - 1.6)];
+    case 'T': // スコット（T）結線
+      return [L(-1.8, cy - 1.6, 1.8, cy - 1.6), L(0, cy - 1.6, 0, cy + 1.8)];
+  }
+}
+
+/** 三相変圧器のひな形。重なる 2 円の中に一次側・二次側の結線記号を描く */
+function trSymbol(kind: SymbolKind, nameJa: string, pri: Winding, sec: Winding, labels: string[]): SymbolDef {
+  return {
+    kind,
+    nameJa,
+    category: 'hv',
+    bbox: { w: 12, h: 20 },
+    prims: [
+      L(0, -10, 0, -8),
+      C(0, -3, 5),
+      C(0, 3, 5),
+      ...windingPrims(-3.7, pri),
+      ...windingPrims(3.7, sec),
+      L(0, 8, 0, 10),
+    ],
+    ports: portsNS(),
+    labelAnchor: rightLabel(12),
+    defaultLabels: labels,
+  };
+}
+
+/** 三相変圧器 Δ-Δ（既定） */
+export const TR_3PH = trSymbol('TR_3PH', '三相変圧器 (Δ-Δ)', 'D', 'D', ['Tr', '3φ']);
+export const TR_3PH_DY = trSymbol('TR_3PH_DY', '三相変圧器 (Δ-Y)', 'D', 'Y', ['Tr', '3φ']);
+export const TR_3PH_YD = trSymbol('TR_3PH_YD', '三相変圧器 (Y-Δ)', 'Y', 'D', ['Tr', '3φ']);
+export const TR_3PH_YY = trSymbol('TR_3PH_YY', '三相変圧器 (Y-Y)', 'Y', 'Y', ['Tr', '3φ']);
+export const TR_3PH_VV = trSymbol('TR_3PH_VV', '三相変圧器 (V-V)', 'V', 'V', ['Tr', '3φ']);
+export const TR_SCOTT = trSymbol('TR_SCOTT', 'スコット結線変圧器', 'T', 'T', ['Tr', 'スコット']);
 
 /** 進相コンデンサ SC */
 export const SC: SymbolDef = {
@@ -344,6 +365,11 @@ export const HV_SYMBOLS: SymbolDef[] = [
   OCR,
   TR_1PH,
   TR_3PH,
+  TR_3PH_DY,
+  TR_3PH_YD,
+  TR_3PH_YY,
+  TR_3PH_VV,
+  TR_SCOTT,
   SC,
   SR,
 ];
