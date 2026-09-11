@@ -121,7 +121,9 @@ input[type=text], input[type=number], input[type=date], select { font: inherit; 
 .props .form-label { width: 90px; }
 .props textarea { font: inherit; width: 100%; border: 1px solid var(--border); border-radius: 3px; }
 .props .small { font-size: 11px; word-break: break-all; }
-.btn-row { display: flex; gap: 4px; margin-top: 8px; }
+/* ボタンが増えても文字を途中で折り返さず、行を折り返す */
+.btn-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.btn-row button { white-space: nowrap; }
 
 /* 出力 */
 .export { max-width: 800px; overflow: auto; }

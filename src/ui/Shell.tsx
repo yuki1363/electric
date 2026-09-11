@@ -282,6 +282,9 @@ export function Shell({ state }: { state: AppState }) {
                 selection={selection}
                 onSelectionChange={setSelection}
                 autoGenerate={autoGenerate}
+                clipboard={clipboard}
+                onClipboardChange={setClipboard}
+                snapStep={snapStep}
               />
             </aside>
           )}
