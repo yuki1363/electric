@@ -2,8 +2,8 @@ import { useEffect, useMemo, useReducer } from 'react';
 import { SymbolGallery } from './ui/SymbolGallery';
 import { Shell } from './ui/Shell';
 import { sampleProject } from './model/defaults';
-import { regenerateAll } from './layout';
-import { initialState, reducer } from './state/reducer';
+import { regenerateAll, regenerateNameplateOnly } from './layout';
+import { autoGenerates, clearStuckStale, initialState, reducer } from './state/reducer';
 import { DispatchContext } from './state/context';
 import { createAutosaver, loadLocal } from './state/autosave';
 import type { Project } from './model/types';
@@ -11,13 +11,14 @@ import type { Project } from './model/types';
 function init(): ReturnType<typeof initialState> {
   const restored = loadLocal();
   const project: Project = restored ?? sampleProject();
-  const r = regenerateAll(project);
+  // 自動作図を切っているときは、復元でも単線結線図を作り直さない（機器銘板表だけ組み直す）
+  const r = autoGenerates(project) ? regenerateAll(project) : regenerateNameplateOnly(project);
   // 復元時は手動編集済みの図面を保持
   const diagrams = r.diagrams.map((d) => {
     const old = project.diagrams.find((e) => e.id === d.id);
     return old && old.edited ? old : d;
   });
-  const s = initialState({ ...project, diagrams });
+  const s = initialState(clearStuckStale({ ...project, diagrams }));
   return { ...s, warnings: r.warnings };
 }
 

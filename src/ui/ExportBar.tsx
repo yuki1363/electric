@@ -69,7 +69,14 @@ export function ExportBar({ project }: { project: Project }) {
             <button onClick={() => setSelected(new Set())}>全解除</button>
           </div>
         </div>
-        {project.diagrams.length === 0 && <p className="muted">図面がありません。「図面を再生成」で作成してください。</p>}
+        {project.diagrams.length === 0 && (
+          <p className="muted">
+            図面がありません。
+            {project.meta.autoGenerate === false
+              ? '「図面」タブの「+ 白紙」から描き始めてください。'
+              : '「図面を再生成」で作成してください。'}
+          </p>
+        )}
         <ul className="export-list">
           {project.diagrams.map((d) => (
             <li key={d.id}>
