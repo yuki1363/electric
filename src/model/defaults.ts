@@ -71,6 +71,33 @@ export function createEmptyProject(): Project {
   };
 }
 
+/**
+ * 仕様を使わず 1 から手で描くためのプロジェクト。
+ * 自動作図を切ってあるので、仕様から図面が作られることはない。
+ */
+export function createBlankProject(): Project {
+  const meta = { ...defaultMeta(), autoGenerate: false };
+  return {
+    version: 1,
+    meta,
+    hv: { ...defaultHv(), enabled: false },
+    panels: [],
+    diagrams: [
+      {
+        id: 'dg_1',
+        kind: 'free',
+        title: '図面 1',
+        sheet: meta.sheet,
+        elements: [],
+        wires: [],
+        texts: [],
+        shapes: [],
+        edited: true,
+      },
+    ],
+  };
+}
+
 const c = (
   no: number,
   name: string,

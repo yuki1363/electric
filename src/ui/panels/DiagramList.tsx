@@ -26,6 +26,17 @@ export function DiagramList({
   const dispatch = useDispatch();
   const anyStale = diagrams.some((d) => d.stale);
   const anyEdited = diagrams.some((d) => d.edited);
+  /** どの図面も消せる。仕様から作る図面は、作り直しでまた出てくることを断ってから消す */
+  const removeDiagram = (d: Diagram) => {
+    const msg =
+      d.kind === 'free' || !autoGenerate
+        ? `「${d.title}」を削除します。よろしいですか？`
+        : `「${d.title}」を削除します。\n\n` +
+          'この図面は仕様から作られるので、次に「全て再生成」を押すと また出てきます。\n' +
+          '出さないようにするには、「プロジェクト情報」の 自動作図 を外すか、仕様から設備を消してください。\n\n' +
+          '削除しますか？';
+    if (confirm(msg)) dispatch({ type: 'REMOVE_DIAGRAM', diagramId: d.id });
+  };
   const regenAll = () => {
     // 自動作図を切っているときは銘板表しか作り直さないので、確認は要らない
     if (autoGenerate && anyEdited && !confirm(REGEN_CONFIRM)) return;
@@ -105,29 +116,18 @@ export function DiagramList({
                 ⛓
               </button>
             )}
-            {d.kind === 'free' ? (
+            {d.kind !== 'free' && autoGenerate && (
               <button
                 className="small"
-                title="この図面を削除する"
-                onClick={() => {
-                  if (confirm(`「${d.title}」を削除します。よろしいですか？`)) {
-                    dispatch({ type: 'REMOVE_DIAGRAM', diagramId: d.id });
-                  }
-                }}
+                title="この図面だけ仕様から作り直す（手で足したものは残ります）"
+                onClick={() => dispatch({ type: 'REGENERATE_ONE', diagramId: d.id })}
               >
-                ✕
+                ↻
               </button>
-            ) : (
-              autoGenerate && (
-                <button
-                  className="small"
-                  title="この図面だけ仕様から作り直す（手で足したものは残ります）"
-                  onClick={() => dispatch({ type: 'REGENERATE_ONE', diagramId: d.id })}
-                >
-                  ↻
-                </button>
-              )
             )}
+            <button className="small" title="この図面を削除する" onClick={() => removeDiagram(d)}>
+              ✕
+            </button>
           </li>
         ))}
       </ul>

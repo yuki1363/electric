@@ -218,9 +218,12 @@ function diagramRows(project: Project): NameplateRow[] {
     for (const el of d.elements) {
       if (!fromDrawingOnly && el.origin !== 'manual' && d.kind !== 'free') continue;
       if (!el.nameplate || Object.values(el.nameplate).every((v) => v === undefined || v === '')) continue;
-      out.push(
-        row(el.nameplateName || getSymbol(el.kind).nameJa, el.nameplate, el.labels[0] ?? '', d.title),
-      );
+      const def = getSymbol(el.kind);
+      // 定格が空ならラベルの 1 行目で埋める。ただし図記号を置いたままの既定ラベル
+      // （「VCB」など機器名そのもの）は定格ではないので使わない
+      const label = el.labels[0] ?? '';
+      const fallback = (def.defaultLabels ?? []).includes(label) ? '' : label;
+      out.push(row(el.nameplateName || def.nameJa, el.nameplate, fallback, d.title));
     }
   }
 

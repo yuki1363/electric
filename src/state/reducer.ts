@@ -89,6 +89,29 @@ function regenerateProject(p: Project): { project: Project; warnings: string[] }
   return { project: clearStuckStale({ ...p, diagrams: r.diagrams }), warnings: r.warnings };
 }
 
+/**
+ * プロジェクトを開くときの整え。
+ * 自動作図を切っているときは図面に一切触らない（消した図面が開き直しで戻らない）。
+ */
+function openProject(p: Project): { project: Project; warnings: string[] } {
+  if (!autoGenerates(p)) return { project: clearStuckStale(p), warnings: [] };
+  return regenerateProject(p);
+}
+
+/**
+ * 自動保存から戻すときの整え。手直し済みの図面はそのまま残す。
+ * 自動作図を切っているときは、やはり図面に触らない。
+ */
+export function restoreProject(p: Project): { project: Project; warnings: string[] } {
+  if (!autoGenerates(p)) return { project: clearStuckStale(p), warnings: [] };
+  const r = regenerateAll(p);
+  const diagrams = r.diagrams.map((d) => {
+    const old = p.diagrams.find((e) => e.id === d.id);
+    return old && old.edited ? old : d;
+  });
+  return { project: clearStuckStale({ ...p, diagrams }), warnings: r.warnings };
+}
+
 export function reducer(state: AppState, action: Action): AppState {
   const h = state.history;
   const p = h.present;
@@ -100,7 +123,7 @@ export function reducer(state: AppState, action: Action): AppState {
 
   switch (action.type) {
     case 'LOAD_PROJECT': {
-      const r = regenerateProject(action.project);
+      const r = openProject(action.project);
       return { history: createHistory(r.project), previewBase: null, warnings: r.warnings };
     }
     case 'IMPORT_NAMEPLATES': {

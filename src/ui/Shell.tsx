@@ -10,7 +10,7 @@ import type { AppState } from '../state/reducer';
 import { canRedo, canUndo } from '../state/history';
 import { useDispatch } from '../state/context';
 import { newId } from '../model/ids';
-import { createEmptyProject, defaultCircuit, defaultHv, defaultPanel, sampleProject } from '../model/defaults';
+import { createBlankProject, createEmptyProject, defaultCircuit, defaultHv, defaultPanel, sampleProject } from '../model/defaults';
 import { parse, projectFileName, serialize } from '../model/project';
 import { downloadBlob, pickFile, readFileAsText } from '../export/download';
 import { titleInfoFromMeta } from '../layout/sheet';
@@ -67,10 +67,12 @@ export function Shell({ state }: { state: AppState }) {
 
   const loadProject = (p: Project) => dispatch({ type: 'LOAD_PROJECT', project: p });
 
-  const onNew = (kind: 'empty' | 'sample') => {
+  const onNew = (kind: 'blank' | 'empty' | 'sample') => {
     if (!confirm('現在の内容を破棄して新規作成しますか？（自動保存も上書きされます）')) return;
-    loadProject(kind === 'empty' ? createEmptyProject() : sampleProject());
+    loadProject(kind === 'blank' ? createBlankProject() : kind === 'empty' ? createEmptyProject() : sampleProject());
     setSpecNav('meta');
+    // 白紙から始めるときは、すぐ描けるように図面タブを開く
+    setTab(kind === 'blank' ? 'draw' : 'spec');
   };
   const onOpen = async () => {
     const f = await pickFile('.json,application/json');
@@ -120,7 +122,7 @@ export function Shell({ state }: { state: AppState }) {
         <nav className="tabs">
           {(
             [
-              ['spec', '仕様入力'],
+              ['spec', autoGenerate ? '仕様入力' : '設定'],
               ['draw', '図面'],
               ['export', '出力'],
             ] as const
@@ -131,7 +133,13 @@ export function Shell({ state }: { state: AppState }) {
           ))}
         </nav>
         <div className="toolbar">
-          <button onClick={() => onNew('empty')}>新規</button>
+          <button
+            onClick={() => onNew('blank')}
+            title="仕様を使わず、白紙 1 枚から手で描き始めます（自動作図オフ。銘板は図面の機器に入力します）"
+          >
+            白紙から
+          </button>
+          <button onClick={() => onNew('empty')} title="仕様を入力して図面を作る（自動作図オン）">新規（仕様から）</button>
           <button onClick={() => onNew('sample')}>サンプル</button>
           <button onClick={onOpen}>開く</button>
           <button onClick={onSave}>保存 (JSON)</button>
@@ -171,35 +179,58 @@ export function Shell({ state }: { state: AppState }) {
         <main className="app-main spec">
           <aside className="spec-nav">
             <button className={specNav === 'meta' ? 'active' : ''} onClick={() => setSpecNav('meta')}>プロジェクト情報</button>
-            <button className={specNav === 'hv' ? 'active' : ''} onClick={() => setSpecNav('hv')}>高圧受電設備</button>
-            <div className="spec-nav-group">副変電所（送りの先）</div>
-            {substations.map((s) => (
-              <button key={s.id} className={specNav === s.id ? 'active sub' : 'sub'} onClick={() => setSpecNav(s.id)}>
-                {s.name}
-              </button>
-            ))}
-            <button className="sub add" onClick={addSubstation}>+ 副変電所を追加</button>
-            <div className="spec-nav-group">分電盤</div>
-            {project.panels.map((p) => (
-              <button key={p.id} className={specNav === p.id ? 'active sub' : 'sub'} onClick={() => setSpecNav(p.id)}>
-                {p.name}
-              </button>
-            ))}
-            <button className="sub add" onClick={addPanel}>+ 分電盤を追加</button>
+            {autoGenerate && (
+              <>
+                <button className={specNav === 'hv' ? 'active' : ''} onClick={() => setSpecNav('hv')}>高圧受電設備</button>
+                <div className="spec-nav-group">副変電所（送りの先）</div>
+                {substations.map((s) => (
+                  <button key={s.id} className={specNav === s.id ? 'active sub' : 'sub'} onClick={() => setSpecNav(s.id)}>
+                    {s.name}
+                  </button>
+                ))}
+                <button className="sub add" onClick={addSubstation}>+ 副変電所を追加</button>
+                <div className="spec-nav-group">分電盤</div>
+                {project.panels.map((p) => (
+                  <button key={p.id} className={specNav === p.id ? 'active sub' : 'sub'} onClick={() => setSpecNav(p.id)}>
+                    {p.name}
+                  </button>
+                ))}
+                <button className="sub add" onClick={addPanel}>+ 分電盤を追加</button>
+              </>
+            )}
           </aside>
           <div className="spec-body">
-            {specNav === 'meta' && <ProjectMetaForm meta={project.meta} />}
-            {specNav === 'hv' && <HvForm hv={project.hv} panels={project.panels} />}
-            {substations
-              .filter((s) => s.id === specNav)
-              .map((s) => (
-                <SubstationForm key={s.id} substation={s} feeders={project.hv.feeders} panels={project.panels} />
-              ))}
-            {project.panels
-              .filter((p) => p.id === specNav)
-              .map((p) => (
-                <LvPanelForm key={p.id} panel={p} transformers={project.hv.transformers} />
-              ))}
+            {(specNav === 'meta' || !autoGenerate) && <ProjectMetaForm meta={project.meta} />}
+            {!autoGenerate && (
+              <section className="form-section">
+                <div className="form-section-head">
+                  <h3>設備の仕様入力は使いません</h3>
+                </div>
+                <p className="muted">
+                  自動作図を切っているので、仕様から図面は作りません。図面は「図面」タブで 1 から描きます。
+                </p>
+                <ol className="muted">
+                  <li>「白紙」で図面を足す</li>
+                  <li>パレットから図記号を置く（どの図面のどの機器でも銘板を入力できます）</li>
+                  <li>機器を選び、右のプロパティ欄で 機器名称・型式・製造者・製造年月・製造番号・数量 を入力する</li>
+                  <li>図面一覧の「銘板表を更新」を押すと、入力した内容から機器銘板表を作ります</li>
+                </ol>
+                <p className="muted">
+                  仕様から作図する使い方に戻すときは、上の「自動作図: 仕様から図面を作る」を入れてください。
+                </p>
+              </section>
+            )}
+            {autoGenerate && specNav === 'hv' && <HvForm hv={project.hv} panels={project.panels} />}
+            {autoGenerate &&
+              substations
+                .filter((s) => s.id === specNav)
+                .map((s) => (
+                  <SubstationForm key={s.id} substation={s} feeders={project.hv.feeders} panels={project.panels} />
+                ))}
+            {autoGenerate &&
+              project.panels
+                .filter((p) => p.id === specNav)
+                .map((p) => <LvPanelForm key={p.id} panel={p} transformers={project.hv.transformers} />)}
           </div>
         </main>
       )}

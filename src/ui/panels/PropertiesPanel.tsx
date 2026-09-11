@@ -92,7 +92,20 @@ export function PropertiesPanel({
 
   const id = selection[0]!;
   const el = diagram.elements.find((e) => e.id === id);
-  if (el) return <ElementProps diagram={diagram} el={el} onDelete={del} canEditNameplate={canEditNameplate(diagram, el, autoGenerate)} />;
+  if (el)
+    return (
+      <ElementProps
+        diagram={diagram}
+        el={el}
+        onDelete={del}
+        canEditNameplate={canEditNameplate(diagram, el, autoGenerate)}
+        nameplateHint={
+          autoGenerate
+            ? '入力すると機器銘板表に 1 行として出ます（図面を再生成すると表に反映されます）'
+            : '入力すると機器銘板表に 1 行として出ます（図面一覧の「銘板表を更新」で反映されます）'
+        }
+      />
+    );
   const w = diagram.wires.find((x) => x.id === id);
   if (w) return <WireProps diagram={diagram} wire={w} onDelete={del} />;
   const t = diagram.texts.find((x) => x.id === id);
@@ -136,11 +149,14 @@ function ElementProps({
   el,
   onDelete,
   canEditNameplate: canEdit,
+  nameplateHint,
 }: {
   diagram: Diagram;
   el: Element;
   onDelete: () => void;
   canEditNameplate: boolean;
+  /** 銘板欄の見出し。反映のしかたは自動作図の入切で変わる */
+  nameplateHint: string;
 }) {
   const dispatch = useDispatch();
   const def = getSymbol(el.kind);
@@ -178,7 +194,7 @@ function ElementProps({
             <span className="muted small">空なら「{def.nameJa}」</span>
           </Row>
           <NameplateDisclosure
-            label="入力すると機器銘板表に 1 行として出ます（図面を再生成すると表に反映されます）"
+            label={nameplateHint}
             value={el.nameplate}
             onChange={(np) => patch({ nameplate: cleanNameplate(np) })}
           />
