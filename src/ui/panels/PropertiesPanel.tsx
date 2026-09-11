@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { Diagram, Element, Nameplate, TextItem, Wire } from '../../model/types';
 import type { Rot } from '../../symbols/transform';
 import { getSymbol } from '../../symbols';
 import { useDispatch } from '../../state/context';
-import type { AlignMode } from '../../state/diagramOps';
+import { MAX_ITEM_SCALE, MIN_ITEM_SCALE, copyItems, itemScale, type AlignMode, type Clipboard } from '../../state/diagramOps';
 import { NumberField, Row, SelectField, TextField } from '../fields';
 import { NameplateDisclosure } from '../forms/NameplateFields';
 
@@ -12,18 +12,53 @@ export function PropertiesPanel({
   selection,
   onSelectionChange,
   autoGenerate = true,
+  clipboard = null,
+  onClipboardChange,
+  snapStep = 1,
 }: {
   diagram: Diagram;
   selection: string[];
   onSelectionChange: (ids: string[]) => void;
   /** false のときは図面が正なので、どの機器にも銘板を入力できる */
   autoGenerate?: boolean;
+  /** コピーした中身（図面をまたいで貼り付けられる） */
+  clipboard?: Clipboard | null;
+  onClipboardChange?: (c: Clipboard | null) => void;
+  /** 複製・貼り付けのずらし量を決めるスナップ刻み */
+  snapStep?: number;
 }) {
   const dispatch = useDispatch();
   const del = () => {
     dispatch({ type: 'DELETE_ITEMS', diagramId: diagram.id, ids: selection });
     onSelectionChange([]);
   };
+  /** 元の上に重ねないためのずらし量 */
+  const offset = Math.max(snapStep, 2) * 3;
+  const duplicate = () =>
+    dispatch({ type: 'DUPLICATE_ITEMS', diagramId: diagram.id, ids: selection, dx: offset, dy: offset });
+  const copy = () => onClipboardChange?.(copyItems(diagram, new Set(selection)));
+  const paste = () => {
+    if (!clipboard) return;
+    const at = { x: clipboard.origin.x + offset, y: clipboard.origin.y + offset };
+    dispatch({ type: 'PASTE_ITEMS', diagramId: diagram.id, clip: clipboard, at });
+  };
+  const clipCount = clipboard
+    ? clipboard.elements.length + clipboard.wires.length + clipboard.texts.length
+    : 0;
+  const pasteButton = clipCount > 0 && (
+    <button onClick={paste} title="コピーした中身をこの図面に貼り付ける (Ctrl+V)">
+      貼り付け（{clipCount}）
+    </button>
+  );
+  /** 選択しているものへの操作。複製はその場、コピーはほかの図面にも貼れる */
+  const actions = (
+    <div className="btn-row">
+      <button onClick={duplicate} title="同じものをすぐ横に作る (Ctrl+D)">複製</button>
+      <button onClick={copy} title="コピーする。ほかの図面にも貼り付けられます (Ctrl+C)">コピー</button>
+      {pasteButton}
+      <button onClick={del} title="削除 (Delete)">削除</button>
+    </div>
+  );
 
   if (selection.length === 0) {
     return (
@@ -37,7 +72,11 @@ export function PropertiesPanel({
           刻みは右下の「スナップ」で変えられます（Alt を押している間はスナップしません）。
           矢印キーで 1 刻み、Shift+矢印で 5 刻み。
         </p>
-        <p className="muted">Ctrl+D 複製 / Ctrl+C・V コピー＆貼り付け（図面をまたげます） / Ctrl+X 切り取り</p>
+        <p className="muted">
+          <b>コピー</b>は図記号を選ぶと右の欄に出ます（Shift+クリックでまとめて選べます）。
+          Ctrl+D 複製 / Ctrl+C・V コピー＆貼り付け（図面をまたげます） / Ctrl+X 切り取り
+        </p>
+        {clipCount > 0 && <div className="btn-row">{pasteButton}</div>}
         <p className="muted">ホイール: 拡縮 / Space+ドラッグ・中ボタン: パン</p>
         <p className="muted">
           {diagram.kind === 'free'
@@ -56,6 +95,9 @@ export function PropertiesPanel({
     const distribute = (axis: 'x' | 'y') =>
       dispatch({ type: 'DISTRIBUTE_ITEMS', diagramId: diagram.id, ids: selection, axis });
     const nEl = diagram.elements.filter((e) => selection.includes(e.id)).length;
+    const elIds = diagram.elements.filter((e) => selection.includes(e.id)).map((e) => e.id);
+    const scaleBy = (mul: number) => dispatch({ type: 'SCALE_ITEMS', diagramId: diagram.id, ids: elIds, mul });
+    const scaleTo = (scale: number) => dispatch({ type: 'SET_ITEM_SCALE', diagramId: diagram.id, ids: elIds, scale });
     return (
       <div className="props">
         <h3>{selection.length} 項目を選択中</h3>
@@ -82,21 +124,43 @@ export function PropertiesPanel({
             <button disabled={nEl < 3} onClick={() => distribute('y')}>上下</button>
           </div>
         </div>
-        <div className="btn-row">
-          <button onClick={del}>削除</button>
+        <div className="align-group">
+          <div className="muted">大きさを変える（図記号だけ）</div>
+          <div className="btn-row">
+            <button disabled={nEl === 0} onClick={() => scaleBy(1 / 1.25)} title="1 段小さくする">－ 小さく</button>
+            <button disabled={nEl === 0} onClick={() => scaleBy(1.25)} title="1 段大きくする">＋ 大きく</button>
+            <button disabled={nEl === 0} onClick={() => scaleTo(1)} title="まわりの機器と同じ大きさに戻す">等倍</button>
+          </div>
         </div>
-        <p className="muted">整列は図記号だけが動きます。つながっている配線は自動で引き直します。</p>
+        {actions}
+        <p className="muted">
+          複製・コピーは選んだ図記号・配線・文字をまとめて写します。
+          整列と大きさは図記号だけが動きます。つながっている配線は自動で引き直します。
+        </p>
       </div>
     );
   }
 
   const id = selection[0]!;
   const el = diagram.elements.find((e) => e.id === id);
-  if (el) return <ElementProps diagram={diagram} el={el} onDelete={del} canEditNameplate={canEditNameplate(diagram, el, autoGenerate)} />;
+  if (el)
+    return (
+      <ElementProps
+        diagram={diagram}
+        el={el}
+        actions={actions}
+        canEditNameplate={canEditNameplate(diagram, el, autoGenerate)}
+        nameplateHint={
+          autoGenerate
+            ? '入力すると機器銘板表に 1 行として出ます（図面を再生成すると表に反映されます）'
+            : '入力すると機器銘板表に 1 行として出ます（図面一覧の「銘板表を更新」で反映されます）'
+        }
+      />
+    );
   const w = diagram.wires.find((x) => x.id === id);
-  if (w) return <WireProps diagram={diagram} wire={w} onDelete={del} />;
+  if (w) return <WireProps diagram={diagram} wire={w} actions={actions} />;
   const t = diagram.texts.find((x) => x.id === id);
-  if (t) return <TextProps diagram={diagram} text={t} onDelete={del} />;
+  if (t) return <TextProps diagram={diagram} text={t} actions={actions} />;
   return null;
 }
 
@@ -134,17 +198,25 @@ function canEditNameplate(d: Diagram, el: Element, autoGenerate: boolean): boole
 function ElementProps({
   diagram,
   el,
-  onDelete,
+  actions,
   canEditNameplate: canEdit,
+  nameplateHint,
 }: {
   diagram: Diagram;
   el: Element;
-  onDelete: () => void;
+  /** 複製・コピー・削除のボタン列 */
+  actions: ReactNode;
   canEditNameplate: boolean;
+  /** 銘板欄の見出し。反映のしかたは自動作図の入切で変わる */
+  nameplateHint: string;
 }) {
   const dispatch = useDispatch();
   const def = getSymbol(el.kind);
   const patch = (p: Partial<Element>) => dispatch({ type: 'UPDATE_ELEMENT', diagramId: diagram.id, id: el.id, patch: p });
+  /** 図面の縮尺を 1 とした、この図記号の見た目の倍率 */
+  const size = itemScale(diagram, el);
+  const scaleBy = (mul: number) => dispatch({ type: 'SCALE_ITEMS', diagramId: diagram.id, ids: [el.id], mul });
+  const scaleTo = (scale: number) => dispatch({ type: 'SET_ITEM_SCALE', diagramId: diagram.id, ids: [el.id], scale });
   return (
     <div className="props">
       <h3>{def.nameJa}</h3>
@@ -158,6 +230,20 @@ function ElementProps({
             {r}°
           </button>
         ))}
+      </Row>
+      <Row label="大きさ">
+        <button onClick={() => scaleBy(1 / 1.25)} title="1 段小さくする">－</button>
+        <NumberField
+          value={Math.round(size * 100)}
+          width={64}
+          min={Math.round(MIN_ITEM_SCALE * 100)}
+          max={Math.round(MAX_ITEM_SCALE * 100)}
+          step={10}
+          onCommit={(v) => scaleTo((v ?? 100) / 100)}
+        />
+        <span className="muted small">%</span>
+        <button onClick={() => scaleBy(1.25)} title="1 段大きくする">＋</button>
+        <button onClick={() => scaleTo(1)} title="まわりの機器と同じ大きさに戻す">等倍</button>
       </Row>
       <Row label="ラベル（1行=1段）">
         <LabelsEditor value={el.labels} onCommit={(labels) => patch({ labels })} />
@@ -178,7 +264,7 @@ function ElementProps({
             <span className="muted small">空なら「{def.nameJa}」</span>
           </Row>
           <NameplateDisclosure
-            label="入力すると機器銘板表に 1 行として出ます（図面を再生成すると表に反映されます）"
+            label={nameplateHint}
             value={el.nameplate}
             onChange={(np) => patch({ nameplate: cleanNameplate(np) })}
           />
@@ -202,14 +288,12 @@ function ElementProps({
           </div>
         </Row>
       )}
-      <div className="btn-row">
-        <button onClick={onDelete}>削除</button>
-      </div>
+      {actions}
     </div>
   );
 }
 
-function WireProps({ diagram, wire, onDelete }: { diagram: Diagram; wire: Wire; onDelete: () => void }) {
+function WireProps({ diagram, wire, actions }: { diagram: Diagram; wire: Wire; actions: ReactNode }) {
   const dispatch = useDispatch();
   const patch = (p: Partial<Wire>) => dispatch({ type: 'UPDATE_WIRE', diagramId: diagram.id, id: wire.id, patch: p });
   const endLabel = (e: Wire['from']) => ('elementId' in e ? `${e.elementId} : ${e.portId}` : `(${e.x}, ${e.y})`);
@@ -232,14 +316,12 @@ function WireProps({ diagram, wire, onDelete }: { diagram: Diagram; wire: Wire; 
       <Row label="終点">
         <span className="muted small">{endLabel(wire.to)}</span>
       </Row>
-      <div className="btn-row">
-        <button onClick={onDelete}>削除</button>
-      </div>
+      {actions}
     </div>
   );
 }
 
-function TextProps({ diagram, text, onDelete }: { diagram: Diagram; text: TextItem; onDelete: () => void }) {
+function TextProps({ diagram, text, actions }: { diagram: Diagram; text: TextItem; actions: ReactNode }) {
   const dispatch = useDispatch();
   const patch = (p: Partial<TextItem>) => dispatch({ type: 'UPDATE_TEXT', diagramId: diagram.id, id: text.id, patch: p });
   return (
@@ -261,9 +343,7 @@ function TextProps({ diagram, text, onDelete }: { diagram: Diagram; text: TextIt
         <NumberField value={text.x} step={1} width={60} onCommit={(v) => patch({ x: v ?? text.x })} />
         <NumberField value={text.y} step={1} width={60} onCommit={(v) => patch({ y: v ?? text.y })} />
       </Row>
-      <div className="btn-row">
-        <button onClick={onDelete}>削除</button>
-      </div>
+      {actions}
     </div>
   );
 }

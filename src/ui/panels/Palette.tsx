@@ -18,7 +18,11 @@ function SymbolIcon({ s }: { s: SymbolDef }) {
   );
 }
 
-export function Palette({
+/**
+ * ツール切り替え（選択・配線・テキスト）。
+ * 図面が増えても押せるよう、図面一覧より上に置く。
+ */
+export function ToolBar({
   tool,
   onToolChange,
   pending,
@@ -30,18 +34,8 @@ export function Palette({
   pending: SymbolKind | null;
   onPendingChange: (k: SymbolKind | null) => void;
 }) {
-  /** 部品を押すと配置モードに入り、図面をクリックした位置に置く */
-  const pick = (s: SymbolDef) => {
-    if (pending === s.kind) {
-      onPendingChange(null);
-      onToolChange('select');
-      return;
-    }
-    onPendingChange(s.kind);
-    onToolChange('place');
-  };
   return (
-    <div className="palette">
+    <div className="toolbar-panel">
       <div className="palette-tools">
         {PICKABLE_TOOLS.map((t) => (
           <button
@@ -59,6 +53,32 @@ export function Palette({
       {tool === 'place' && pending && (
         <div className="palette-hint">図面をクリックして配置（配線の上に置くと途中に入ります）。Esc で取り消し</div>
       )}
+    </div>
+  );
+}
+
+export function Palette({
+  pending,
+  onPendingChange,
+  onToolChange,
+}: {
+  /** 配置待ちの図記号 */
+  pending: SymbolKind | null;
+  onPendingChange: (k: SymbolKind | null) => void;
+  onToolChange: (t: Tool) => void;
+}) {
+  /** 部品を押すと配置モードに入り、図面をクリックした位置に置く */
+  const pick = (s: SymbolDef) => {
+    if (pending === s.kind) {
+      onPendingChange(null);
+      onToolChange('select');
+      return;
+    }
+    onPendingChange(s.kind);
+    onToolChange('place');
+  };
+  return (
+    <div className="palette">
       {symbolsByCategory().map((cat) => (
         <details key={cat.category} open={cat.category !== 'face'}>
           <summary>{cat.name}</summary>

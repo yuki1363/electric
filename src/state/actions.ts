@@ -30,6 +30,8 @@ export type Action =
   | { type: 'RENAME_DIAGRAM'; diagramId: string; title: string }
   | { type: 'REMOVE_DIAGRAM'; diagramId: string }
   | { type: 'RELEASE_DIAGRAM'; diagramId: string }
+  /** 消した自動生成図面をもう一度作れるようにする */
+  | { type: 'RESTORE_REMOVED_DIAGRAMS' }
   // 図面編集
   | { type: 'MOVE_PREVIEW'; diagramId: string; ids: string[]; dx: number; dy: number }
   | { type: 'MOVE_LABEL_PREVIEW'; diagramId: string; id: string; offset: Point }
@@ -45,6 +47,10 @@ export type Action =
   | { type: 'DELETE_ITEMS'; diagramId: string; ids: string[] }
   | { type: 'ALIGN_ITEMS'; diagramId: string; ids: string[]; mode: AlignMode }
   | { type: 'DISTRIBUTE_ITEMS'; diagramId: string; ids: string[]; axis: 'x' | 'y' }
+  /** 図記号の大きさを掛け算で変える（0.8 で 1 段小さく） */
+  | { type: 'SCALE_ITEMS'; diagramId: string; ids: string[]; mul: number }
+  /** 図記号の大きさを直接指定する（1 = 図面の縮尺どおり） */
+  | { type: 'SET_ITEM_SCALE'; diagramId: string; ids: string[]; scale: number }
   | { type: 'DUPLICATE_ITEMS'; diagramId: string; ids: string[]; dx: number; dy: number }
   | { type: 'PASTE_ITEMS'; diagramId: string; clip: Clipboard; at: Point }
   | { type: 'WIRE_SEGMENT_PREVIEW'; diagramId: string; wireId: string; index: number; delta: number; base: Point[] }

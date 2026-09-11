@@ -443,6 +443,11 @@ export interface Project {
   substations?: SubstationSpec[];
   /** 図面に描かない機器の銘板（制御補機など）。銘板表にのみ出す */
   extraNameplates?: NameplateEntry[];
+  /**
+   * 手で消した自動生成図面の id。作り直しても作らない。
+   * これが無いと、消した図面が再生成・開き直しのたびに戻ってきてしまう。
+   */
+  removedDiagrams?: Id[];
   diagrams: Diagram[];
 }
 

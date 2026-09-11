@@ -19,15 +19,40 @@ export function initialState(project: Project): AppState {
 export const autoGenerates = (p: Project): boolean => p.meta.autoGenerate !== false;
 
 /**
- * 仕様変更 → 生成済み図面を stale にする。
- * 自動作図を切っているときは単線結線図を作り直さないので、機器銘板表だけに印を付ける。
+ * その図面が「図面を再生成 / 銘板表を更新」で作り直されるか。
+ * 手描き（白紙・写し）は仕様から切り離されているので作り直さない。
+ * 自動作図を切っているときは、図面に置かれた機器から組み直す機器銘板表だけが対象。
+ */
+function isRegenerated(d: Diagram, all: boolean): boolean {
+  if (d.kind === 'free') return false;
+  return all || d.kind === 'nameplate';
+}
+
+/**
+ * 仕様変更 → 作り直しの対象になる図面に「要更新」を付ける。
+ * 対象にならない図面からは印を外す（更新する手立てがないのに印だけ残らないように）。
  */
 function markStale(p: Project): Project {
   const all = autoGenerates(p);
   return {
     ...p,
-    diagrams: p.diagrams.map((d) => (d.stale || (!all && d.kind !== 'nameplate') ? d : { ...d, stale: true })),
+    diagrams: p.diagrams.map((d) => {
+      const want = isRegenerated(d, all);
+      if (want === !!d.stale) return d;
+      return want ? { ...d, stale: true } : { ...d, stale: undefined };
+    }),
   };
+}
+
+/**
+ * 作り直しの対象でない図面から「要更新」を外す。
+ * 古い保存データや、自動作図を切る前に付いた印をここで落とす。
+ */
+export function clearStuckStale(p: Project): Project {
+  const all = autoGenerates(p);
+  const stuck = (d: Diagram) => !!d.stale && !isRegenerated(d, all);
+  if (!p.diagrams.some(stuck)) return p;
+  return { ...p, diagrams: p.diagrams.map((d) => (stuck(d) ? { ...d, stale: undefined } : d)) };
 }
 
 function withDiagram(p: Project, id: string, f: (d: Diagram) => Diagram): Project {
@@ -61,7 +86,30 @@ const insertAfter = (list: Diagram[], d: Diagram, afterId?: string): Diagram[] =
 function regenerateProject(p: Project): { project: Project; warnings: string[] } {
   // 自動作図を切っていても、機器銘板表は図面に置かれた機器から作り直す
   const r = autoGenerates(p) ? regenerateAll(p) : regenerateNameplateOnly(p);
-  return { project: { ...p, diagrams: r.diagrams }, warnings: r.warnings };
+  return { project: clearStuckStale({ ...p, diagrams: r.diagrams }), warnings: r.warnings };
+}
+
+/**
+ * プロジェクトを開くときの整え。
+ * 自動作図を切っているときは図面に一切触らない（消した図面が開き直しで戻らない）。
+ */
+function openProject(p: Project): { project: Project; warnings: string[] } {
+  if (!autoGenerates(p)) return { project: clearStuckStale(p), warnings: [] };
+  return regenerateProject(p);
+}
+
+/**
+ * 自動保存から戻すときの整え。手直し済みの図面はそのまま残す。
+ * 自動作図を切っているときは、やはり図面に触らない。
+ */
+export function restoreProject(p: Project): { project: Project; warnings: string[] } {
+  if (!autoGenerates(p)) return { project: clearStuckStale(p), warnings: [] };
+  const r = regenerateAll(p);
+  const diagrams = r.diagrams.map((d) => {
+    const old = p.diagrams.find((e) => e.id === d.id);
+    return old && old.edited ? old : d;
+  });
+  return { project: clearStuckStale({ ...p, diagrams }), warnings: r.warnings };
 }
 
 export function reducer(state: AppState, action: Action): AppState {
@@ -75,7 +123,7 @@ export function reducer(state: AppState, action: Action): AppState {
 
   switch (action.type) {
     case 'LOAD_PROJECT': {
-      const r = regenerateProject(action.project);
+      const r = openProject(action.project);
       return { history: createHistory(r.project), previewBase: null, warnings: r.warnings };
     }
     case 'IMPORT_NAMEPLATES': {
@@ -207,8 +255,30 @@ export function reducer(state: AppState, action: Action): AppState {
         ...p,
         diagrams: p.diagrams.map((d) => (d.id === action.diagramId ? { ...d, title: action.title } : d)),
       });
-    case 'REMOVE_DIAGRAM':
-      return commit({ ...p, diagrams: p.diagrams.filter((d) => d.id !== action.diagramId) });
+    case 'REMOVE_DIAGRAM': {
+      const d = p.diagrams.find((x) => x.id === action.diagramId);
+      if (!d) return state;
+      // 仕様から作る図面は「消した」ことを覚えておく（作り直し・開き直しで戻さない）
+      const removed =
+        d.kind === 'free' ? p.removedDiagrams : [...new Set([...(p.removedDiagrams ?? []), action.diagramId])];
+      return commit({
+        ...p,
+        diagrams: p.diagrams.filter((x) => x.id !== action.diagramId),
+        ...(removed && removed.length > 0 ? { removedDiagrams: removed } : {}),
+      });
+    }
+    case 'RESTORE_REMOVED_DIAGRAMS': {
+      if (!p.removedDiagrams || p.removedDiagrams.length === 0) return state;
+      const { removedDiagrams: _drop, ...rest } = p;
+      const r = regenerateProject(rest as Project);
+      return commit(r.project, r.warnings);
+    }
+    case 'SCALE_ITEMS':
+      return commit(
+        withDiagram(p, action.diagramId, (d) => ops.scaleItems(d, new Set(action.ids), (cur) => cur * action.mul)),
+      );
+    case 'SET_ITEM_SCALE':
+      return commit(withDiagram(p, action.diagramId, (d) => ops.scaleItems(d, new Set(action.ids), () => action.scale)));
     case 'DUPLICATE_ITEMS':
       return commit(
         withDiagram(p, action.diagramId, (d) => ops.duplicateItems(d, new Set(action.ids), action.dx, action.dy).diagram),
