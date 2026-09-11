@@ -28,6 +28,43 @@ const manual = <T extends { origin?: 'manual' }>(x: T): T => ({ ...x, origin: 'm
 const sized = (d: Diagram, el: Element): Element =>
   el.scale === undefined && d.scale && d.scale !== 1 ? { ...el, scale: d.scale } : el;
 
+/** 図記号の大きさの下限・上限（図面の縮尺を除いた見た目の倍率） */
+export const MIN_ITEM_SCALE = 0.25;
+export const MAX_ITEM_SCALE = 4;
+
+/** 図面の縮尺。図記号の大きさはこれを 1 とした相対値で扱う */
+export const diagramScale = (d: Diagram): number => (d.scale && d.scale > 0 ? d.scale : 1);
+
+/** 図記号の見た目の倍率（1 = まわりの機器と同じ大きさ） */
+export function itemScale(d: Diagram, el: Element): number {
+  return (el.scale ?? 1) / diagramScale(d);
+}
+
+const clampScale = (v: number): number => Math.min(MAX_ITEM_SCALE, Math.max(MIN_ITEM_SCALE, v));
+
+/**
+ * 図記号の大きさを変える。ポートの位置が動くので、つながった配線は引き直す。
+ * 倍率は図面の縮尺を除いた見た目の値で受ける（用紙に収めるための縮小と混ざらないように）。
+ */
+export function scaleItems(d: Diagram, ids: ReadonlySet<string>, next: (cur: number) => number): Diagram {
+  const base = diagramScale(d);
+  let changed = false;
+  const elements = d.elements.map((e) => {
+    if (!ids.has(e.id)) return e;
+    const cur = itemScale(d, e);
+    const v = clampScale(Math.round(next(cur) * 1000) / 1000);
+    if (Math.abs(v - cur) < 1e-6) return e;
+    changed = true;
+    return { ...e, scale: Math.round(v * base * 10000) / 10000 };
+  });
+  if (!changed) return d;
+  const wires = d.wires.map((w) => {
+    const hit = (isPortEnd(w.from) && ids.has(w.from.elementId)) || (isPortEnd(w.to) && ids.has(w.to.elementId));
+    return hit ? rerouteWire(w, elements) : w;
+  });
+  return touched({ ...d, elements, wires });
+}
+
 /** 選択項目（要素・テキスト・配線）を移動する。接続配線は再ルーティング */
 export function moveItems(d: Diagram, ids: ReadonlySet<string>, dx: number, dy: number): Diagram {
   if (dx === 0 && dy === 0) return d;

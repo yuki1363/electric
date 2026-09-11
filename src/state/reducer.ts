@@ -255,8 +255,30 @@ export function reducer(state: AppState, action: Action): AppState {
         ...p,
         diagrams: p.diagrams.map((d) => (d.id === action.diagramId ? { ...d, title: action.title } : d)),
       });
-    case 'REMOVE_DIAGRAM':
-      return commit({ ...p, diagrams: p.diagrams.filter((d) => d.id !== action.diagramId) });
+    case 'REMOVE_DIAGRAM': {
+      const d = p.diagrams.find((x) => x.id === action.diagramId);
+      if (!d) return state;
+      // 仕様から作る図面は「消した」ことを覚えておく（作り直し・開き直しで戻さない）
+      const removed =
+        d.kind === 'free' ? p.removedDiagrams : [...new Set([...(p.removedDiagrams ?? []), action.diagramId])];
+      return commit({
+        ...p,
+        diagrams: p.diagrams.filter((x) => x.id !== action.diagramId),
+        ...(removed && removed.length > 0 ? { removedDiagrams: removed } : {}),
+      });
+    }
+    case 'RESTORE_REMOVED_DIAGRAMS': {
+      if (!p.removedDiagrams || p.removedDiagrams.length === 0) return state;
+      const { removedDiagrams: _drop, ...rest } = p;
+      const r = regenerateProject(rest as Project);
+      return commit(r.project, r.warnings);
+    }
+    case 'SCALE_ITEMS':
+      return commit(
+        withDiagram(p, action.diagramId, (d) => ops.scaleItems(d, new Set(action.ids), (cur) => cur * action.mul)),
+      );
+    case 'SET_ITEM_SCALE':
+      return commit(withDiagram(p, action.diagramId, (d) => ops.scaleItems(d, new Set(action.ids), () => action.scale)));
     case 'DUPLICATE_ITEMS':
       return commit(
         withDiagram(p, action.diagramId, (d) => ops.duplicateItems(d, new Set(action.ids), action.dx, action.dy).diagram),

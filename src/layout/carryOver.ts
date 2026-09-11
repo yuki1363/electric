@@ -10,6 +10,7 @@ import { unfitPoint } from './fit';
  * 引き継ぐもの:
  *  - `origin: 'manual'` の機器・配線・文字（手で足したもの）
  *  - 自動生成の機器の `labelOffset`（自動生成側は絶対に付けないので手入力と分かる）
+ *  - 自動生成の機器の大きさ（手で変えた倍率。自動生成は常に等倍で作る）
  *  - 自動生成の配線の `manual: true` と経路（ドラッグで直した線）
  *
  * 引き継がないもの:
@@ -68,8 +69,11 @@ export function carryOverEdits(old: Diagram | undefined, gen: Diagram): { diagra
     ...gen.elements.map((e) => {
       const prev = oldById.get(e.id);
       if (!prev || prev.kind !== e.kind || prev.origin === 'manual') return e;
+      // 用紙に収める縮小を戻した倍率。1 でなければ手で大きさを変えている
+      const prevScale = unEl(prev).scale ?? 1;
       const over = {
         ...(prev.labelOffset ? { labelOffset: unEl(prev).labelOffset! } : {}),
+        ...(Math.abs(prevScale - 1) > 1e-3 ? { scale: prevScale } : {}),
         ...(prev.nameplate ? { nameplate: prev.nameplate } : {}),
         ...(prev.nameplateName ? { nameplateName: prev.nameplateName } : {}),
       };

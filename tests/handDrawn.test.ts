@@ -3,6 +3,7 @@ import { initialState, reducer, restoreProject } from '../src/state/reducer';
 import { regenerateAll } from '../src/layout';
 import { createBlankProject, sampleProject } from '../src/model/defaults';
 import { nameplateRows } from '../src/model/nameplateRows';
+import { parse, serialize } from '../src/model/project';
 import type { AppState } from '../src/state/reducer';
 import type { Diagram, Project } from '../src/model/types';
 
@@ -115,14 +116,14 @@ describe('図面を削除できる', () => {
     expect(restoreProject(present(s)).project.diagrams.some((d) => d.id === hv.id)).toBe(false);
   });
 
-  it('自動作図が入っていれば、消した仕様の図面は作り直しで戻る', () => {
+  it('自動作図が入っていても、消した図面は作り直しで戻らない', () => {
     const p = sampleProject();
     let s = initialState({ ...p, diagrams: regenerateAll(p).diagrams });
     const hv = present(s).diagrams.find((d) => d.kind === 'hv-sld')!;
     s = reducer(s, { type: 'REMOVE_DIAGRAM', diagramId: hv.id });
     expect(present(s).diagrams.some((d) => d.id === hv.id)).toBe(false);
     s = reducer(s, { type: 'REGENERATE' });
-    expect(present(s).diagrams.some((d) => d.id === hv.id)).toBe(true);
+    expect(present(s).diagrams.some((d) => d.id === hv.id)).toBe(false);
   });
 
   it('手描きの図面を消すと、開き直しても消えたまま', () => {
@@ -131,5 +132,62 @@ describe('図面を削除できる', () => {
     s = reducer(s, { type: 'REMOVE_DIAGRAM', diagramId: id });
     expect(present(s).diagrams).toEqual([]);
     expect(restoreProject(present(s)).project.diagrams).toEqual([]);
+  });
+});
+
+describe('消した図面は戻ってこない', () => {
+  const hvId = (s: AppState) => present(s).diagrams.find((d) => d.kind === 'hv-sld')!.id;
+
+  /** サンプル仕様 + 図面 1 式（自動作図オン） */
+  function seeded(): AppState {
+    const p = sampleProject();
+    return initialState({ ...p, diagrams: regenerateAll(p).diagrams });
+  }
+
+  it('自動作図が入っていても、消した図面は作り直しで戻らない', () => {
+    let s = seeded();
+    const id = hvId(s);
+    s = reducer(s, { type: 'REMOVE_DIAGRAM', diagramId: id });
+    expect(present(s).removedDiagrams).toContain(id);
+    s = reducer(s, { type: 'REGENERATE' });
+    expect(present(s).diagrams.some((d) => d.id === id)).toBe(false);
+    // 仕様を変えても戻らない
+    s = reducer(s, { type: 'SET_META', meta: { author: 'テスト' } });
+    s = reducer(s, { type: 'REGENERATE' });
+    expect(present(s).diagrams.some((d) => d.id === id)).toBe(false);
+  });
+
+  it('保存して開き直しても、自動保存から戻しても、消したままになる', () => {
+    let s = seeded();
+    const id = hvId(s);
+    s = reducer(s, { type: 'REMOVE_DIAGRAM', diagramId: id });
+    const saved = parse(serialize(present(s)));
+    expect(saved.removedDiagrams).toContain(id);
+    expect(present(reducer(s, { type: 'LOAD_PROJECT', project: saved })).diagrams.some((d) => d.id === id)).toBe(false);
+    expect(restoreProject(saved).project.diagrams.some((d) => d.id === id)).toBe(false);
+  });
+
+  it('「戻す」を押すと作り直せるようになる', () => {
+    let s = seeded();
+    const id = hvId(s);
+    s = reducer(s, { type: 'REMOVE_DIAGRAM', diagramId: id });
+    s = reducer(s, { type: 'RESTORE_REMOVED_DIAGRAMS' });
+    expect(present(s).removedDiagrams ?? []).toEqual([]);
+    expect(present(s).diagrams.some((d) => d.id === id)).toBe(true);
+  });
+
+  it('取り消し (Ctrl+Z) でも消す前に戻せる', () => {
+    let s = seeded();
+    const id = hvId(s);
+    s = reducer(s, { type: 'REMOVE_DIAGRAM', diagramId: id });
+    s = reducer(s, { type: 'UNDO' });
+    expect(present(s).diagrams.some((d) => d.id === id)).toBe(true);
+    expect(present(s).removedDiagrams ?? []).toEqual([]);
+  });
+
+  it('手描きの図面を消しても、消した図面の一覧には積まない', () => {
+    let s = blank();
+    s = reducer(s, { type: 'REMOVE_DIAGRAM', diagramId: present(s).diagrams[0]!.id });
+    expect(present(s).removedDiagrams ?? []).toEqual([]);
   });
 });

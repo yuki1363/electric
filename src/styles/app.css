@@ -84,9 +84,13 @@ input[type=text], input[type=number], input[type=date], select { font: inherit; 
 .side { width: 240px; background: var(--panel); border-right: 1px solid var(--border); overflow-y: auto; padding: 8px; }
 .side.right { border-right: none; border-left: 1px solid var(--border); width: 260px; }
 .diagram-list ul { list-style: none; margin: 6px 0; padding: 0; }
-.diagram-list li { display: flex; align-items: center; gap: 4px; padding: 2px 4px; border-radius: 4px; }
+/* 図面名を 1 行目に、操作ボタンを 2 行目に置く（ボタンが増えても名前が縦に潰れない） */
+.diagram-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 2px 4px; border-radius: 4px; }
+.diagram-list li button.link { flex: 1 1 100%; padding-left: 0; }
+.diagram-list li .badges { margin-right: auto; }
 .diagram-list li.active { background: #fff; box-shadow: 0 0 0 1px var(--accent); }
 .diagram-list-head { display: flex; justify-content: space-between; align-items: center; }
+.diagram-list-note { display: flex; gap: 6px; align-items: center; margin-top: 4px; }
 .badges { display: flex; gap: 2px; }
 .badge { font-size: 10px; padding: 0 4px; border-radius: 3px; }
 .badge.stale { background: #fff3cd; color: #8a6d00; }

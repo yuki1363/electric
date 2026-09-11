@@ -3,7 +3,7 @@ import type { Diagram, Element, Nameplate, TextItem, Wire } from '../../model/ty
 import type { Rot } from '../../symbols/transform';
 import { getSymbol } from '../../symbols';
 import { useDispatch } from '../../state/context';
-import type { AlignMode } from '../../state/diagramOps';
+import { MAX_ITEM_SCALE, MIN_ITEM_SCALE, itemScale, type AlignMode } from '../../state/diagramOps';
 import { NumberField, Row, SelectField, TextField } from '../fields';
 import { NameplateDisclosure } from '../forms/NameplateFields';
 
@@ -56,6 +56,9 @@ export function PropertiesPanel({
     const distribute = (axis: 'x' | 'y') =>
       dispatch({ type: 'DISTRIBUTE_ITEMS', diagramId: diagram.id, ids: selection, axis });
     const nEl = diagram.elements.filter((e) => selection.includes(e.id)).length;
+    const elIds = diagram.elements.filter((e) => selection.includes(e.id)).map((e) => e.id);
+    const scaleBy = (mul: number) => dispatch({ type: 'SCALE_ITEMS', diagramId: diagram.id, ids: elIds, mul });
+    const scaleTo = (scale: number) => dispatch({ type: 'SET_ITEM_SCALE', diagramId: diagram.id, ids: elIds, scale });
     return (
       <div className="props">
         <h3>{selection.length} 項目を選択中</h3>
@@ -82,10 +85,18 @@ export function PropertiesPanel({
             <button disabled={nEl < 3} onClick={() => distribute('y')}>上下</button>
           </div>
         </div>
+        <div className="align-group">
+          <div className="muted">大きさを変える（図記号だけ）</div>
+          <div className="btn-row">
+            <button disabled={nEl === 0} onClick={() => scaleBy(1 / 1.25)} title="1 段小さくする">－ 小さく</button>
+            <button disabled={nEl === 0} onClick={() => scaleBy(1.25)} title="1 段大きくする">＋ 大きく</button>
+            <button disabled={nEl === 0} onClick={() => scaleTo(1)} title="まわりの機器と同じ大きさに戻す">等倍</button>
+          </div>
+        </div>
         <div className="btn-row">
           <button onClick={del}>削除</button>
         </div>
-        <p className="muted">整列は図記号だけが動きます。つながっている配線は自動で引き直します。</p>
+        <p className="muted">整列と大きさは図記号だけが動きます。つながっている配線は自動で引き直します。</p>
       </div>
     );
   }
@@ -161,6 +172,10 @@ function ElementProps({
   const dispatch = useDispatch();
   const def = getSymbol(el.kind);
   const patch = (p: Partial<Element>) => dispatch({ type: 'UPDATE_ELEMENT', diagramId: diagram.id, id: el.id, patch: p });
+  /** 図面の縮尺を 1 とした、この図記号の見た目の倍率 */
+  const size = itemScale(diagram, el);
+  const scaleBy = (mul: number) => dispatch({ type: 'SCALE_ITEMS', diagramId: diagram.id, ids: [el.id], mul });
+  const scaleTo = (scale: number) => dispatch({ type: 'SET_ITEM_SCALE', diagramId: diagram.id, ids: [el.id], scale });
   return (
     <div className="props">
       <h3>{def.nameJa}</h3>
@@ -174,6 +189,20 @@ function ElementProps({
             {r}°
           </button>
         ))}
+      </Row>
+      <Row label="大きさ">
+        <button onClick={() => scaleBy(1 / 1.25)} title="1 段小さくする">－</button>
+        <NumberField
+          value={Math.round(size * 100)}
+          width={64}
+          min={Math.round(MIN_ITEM_SCALE * 100)}
+          max={Math.round(MAX_ITEM_SCALE * 100)}
+          step={10}
+          onCommit={(v) => scaleTo((v ?? 100) / 100)}
+        />
+        <span className="muted small">%</span>
+        <button onClick={() => scaleBy(1.25)} title="1 段大きくする">＋</button>
+        <button onClick={() => scaleTo(1)} title="まわりの機器と同じ大きさに戻す">等倍</button>
       </Row>
       <Row label="ラベル（1行=1段）">
         <LabelsEditor value={el.labels} onCommit={(labels) => patch({ labels })} />

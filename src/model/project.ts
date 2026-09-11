@@ -165,6 +165,10 @@ export function parse(text: string): Project {
   const extraNameplates = Array.isArray(raw.extraNameplates)
     ? (raw.extraNameplates as Project['extraNameplates'])
     : undefined;
+  // 手で消した自動生成図面。開き直しで戻さないために残す
+  const removedDiagrams = Array.isArray(raw.removedDiagrams)
+    ? raw.removedDiagrams.filter((x): x is string => typeof x === 'string')
+    : undefined;
   return {
     version: 1,
     meta,
@@ -172,6 +176,7 @@ export function parse(text: string): Project {
     panels,
     ...(substations && substations.length > 0 ? { substations } : {}),
     ...(extraNameplates ? { extraNameplates } : {}),
+    ...(removedDiagrams && removedDiagrams.length > 0 ? { removedDiagrams } : {}),
     diagrams,
   };
 }

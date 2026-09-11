@@ -16,26 +16,33 @@ export function DiagramList({
   activeId,
   onSelect,
   autoGenerate = true,
+  removedCount = 0,
 }: {
   diagrams: Diagram[];
   activeId: string;
   onSelect: (id: string) => void;
   /** false のときは自動作図の操作（再生成）を出さない */
   autoGenerate?: boolean;
+  /** ✕ で消した、仕様から作る図面の枚数 */
+  removedCount?: number;
 }) {
   const dispatch = useDispatch();
   const anyStale = diagrams.some((d) => d.stale);
   const anyEdited = diagrams.some((d) => d.edited);
-  /** どの図面も消せる。仕様から作る図面は、作り直しでまた出てくることを断ってから消す */
+  /** どの図面も消せる。仕様から作る図面は、消したことを覚えて作り直しでも戻さない */
   const removeDiagram = (d: Diagram) => {
     const msg =
-      d.kind === 'free' || !autoGenerate
+      d.kind === 'free'
         ? `「${d.title}」を削除します。よろしいですか？`
         : `「${d.title}」を削除します。\n\n` +
-          'この図面は仕様から作られるので、次に「全て再生成」を押すと また出てきます。\n' +
-          '出さないようにするには、「プロジェクト情報」の 自動作図 を外すか、仕様から設備を消してください。\n\n' +
+          '仕様から作る図面ですが、作り直しても戻しません。\n' +
+          '戻すときは図面一覧の「消した図面を戻す」を押してください（Ctrl+Z でも取り消せます）。\n\n' +
           '削除しますか？';
     if (confirm(msg)) dispatch({ type: 'REMOVE_DIAGRAM', diagramId: d.id });
+  };
+  const restoreRemoved = () => {
+    if (!confirm(`✕ で消した図面 ${removedCount} 枚を、仕様から作り直せるように戻します。よろしいですか？`)) return;
+    dispatch({ type: 'RESTORE_REMOVED_DIAGRAMS' });
   };
   const regenAll = () => {
     // 自動作図を切っているときは銘板表しか作り直さないので、確認は要らない
@@ -69,6 +76,14 @@ export function DiagramList({
           {autoGenerate ? '全て再生成' : '銘板表を更新'}
         </button>
       </div>
+      {removedCount > 0 && (
+        <div className="diagram-list-note">
+          <span className="muted small">消した図面 {removedCount} 枚</span>
+          <button className="small" title="✕ で消した図面を、もう一度 仕様から作れるようにします" onClick={restoreRemoved}>
+            戻す
+          </button>
+        </div>
+      )}
       {diagrams.length === 0 && (
         <p className="muted">
           図面がありません。{autoGenerate ? '仕様を入力して再生成するか、' : ''}「+ 白紙」で描き始めてください。

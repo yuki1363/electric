@@ -74,7 +74,7 @@ export interface RegenerateResult {
  * 仕様から消えた図面は結果に含まれない＝削除される。
  */
 export function regenerateAll(project: Project, existing: Diagram[] = project.diagrams): RegenerateResult {
-  const results = mergeDiagrams(existing, buildAll(project)).map(fitResult);
+  const results = mergeDiagrams(existing, keepWanted(project, buildAll(project))).map(fitResult);
   // 仕様に紐づかない図面（白紙・生成図面の写し）は触らずそのまま残す
   const free = existing.filter((d) => d.kind === 'free');
   return {
@@ -83,12 +83,18 @@ export function regenerateAll(project: Project, existing: Diagram[] = project.di
   };
 }
 
+/** 手で消した図面は作り直さない（消したものが戻ってこないように） */
+function keepWanted(project: Project, built: GenResult[]): GenResult[] {
+  const removed = new Set(project.removedDiagrams ?? []);
+  return removed.size === 0 ? built : built.filter((r) => !removed.has(r.diagram.id));
+}
+
 /**
  * 機器銘板表だけを作り直す（自動作図を切っているとき用）。
  * 単線結線図などには触らず、図面に置かれた機器から表を組み立て直す。
  */
 export function regenerateNameplateOnly(project: Project): RegenerateResult {
-  const results = mergeDiagrams(project.diagrams, generateNameplate(project)).map(fitResult);
+  const results = mergeDiagrams(project.diagrams, keepWanted(project, generateNameplate(project))).map(fitResult);
   const others = project.diagrams.filter((d) => d.kind !== 'nameplate');
   return {
     diagrams: [...others, ...results.map((r) => r.diagram)],

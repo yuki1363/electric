@@ -241,6 +241,7 @@ export function Shell({ state }: { state: AppState }) {
             <DiagramList
               diagrams={project.diagrams}
               autoGenerate={autoGenerate}
+              removedCount={project.removedDiagrams?.length ?? 0}
               activeId={activeDiagramId}
               onSelect={(id) => {
                 setActiveDiagramId(id);
