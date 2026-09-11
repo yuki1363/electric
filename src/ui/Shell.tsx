@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Point, SymbolKind } from '../symbols/types';
 import type { Project } from '../model/types';
 import type { Tool } from './canvas/types';
-import { Palette } from './panels/Palette';
+import { Palette, ToolBar } from './panels/Palette';
 import { ExportBar } from './ExportBar';
 import { ImportDialog } from './ImportDialog';
 import { PropertiesPanel } from './panels/PropertiesPanel';
@@ -238,6 +238,9 @@ export function Shell({ state }: { state: AppState }) {
       {tab === 'draw' && (
         <main className="app-main draw">
           <aside className="side left">
+            {active && (
+              <ToolBar tool={tool} onToolChange={setTool} pending={pending} onPendingChange={setPending} />
+            )}
             <DiagramList
               diagrams={project.diagrams}
               autoGenerate={autoGenerate}
@@ -248,9 +251,7 @@ export function Shell({ state }: { state: AppState }) {
                 setSelection([]);
               }}
             />
-            {active && (
-              <Palette tool={tool} onToolChange={setTool} pending={pending} onPendingChange={setPending} />
-            )}
+            {active && <Palette pending={pending} onPendingChange={setPending} onToolChange={setTool} />}
           </aside>
           {active ? (
             <Canvas
